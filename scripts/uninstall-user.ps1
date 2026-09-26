@@ -789,7 +789,7 @@ function Set-CurrentSelection {
     $newActivated = $false
 
     $existing = Get-PathItemEvenIfDangling -Path $currentLink
-    Assert-CurrentLinkSafe -Path $currentLink -VersionsRoot (Join-Path $InstallRoot "versions")
+    $null = Assert-CurrentLinkSafe -Path $currentLink -VersionsRoot (Join-Path $InstallRoot "versions")
 
     $pointer = [ordered]@{
         format = "comtool-v2-current"
@@ -877,7 +877,7 @@ try {
         throw "Timed out waiting for another COM Tool V2 install/uninstall operation to finish."
     }
 
-    Assert-CurrentLinkSafe -Path $currentLinkPath -VersionsRoot $versionsRoot
+    $null = Assert-CurrentLinkSafe -Path $currentLinkPath -VersionsRoot $versionsRoot
 
     if ($RemoveState) {
         $stateRemovalSemaphore =
