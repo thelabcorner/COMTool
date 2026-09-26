@@ -24,7 +24,7 @@ V2 is an executable-first, agent-native Adobe desktop automation runtime. Illust
 
 ## Current phase
 
-**Production foundation + Illustrator Wave B controlled mutation/document lifecycle alpha.**
+**Production foundation + guarded Illustrator controlled mutation/document lifecycle surface.**
 
 Phase 0 architecture is accepted. The production topology is:
 
@@ -47,6 +47,12 @@ agent / CLI / future MCP
 ```
 
 Direct mode and one-shot broker mode remain diagnostic/fallback transports. The persistent runtime is the preferred agent surface.
+
+The persistent runtime pipe uses Windows `CurrentUserOnly` isolation. The
+current Windows user is therefore the public local trust boundary; V2 does not
+pretend that the pipe provides an additional credential boundary against other
+processes already running as that same user. The private supervisor→worker pipe
+does have a separate ephemeral token plus child PID/start-time verification.
 
 ## Transports
 
@@ -258,12 +264,31 @@ mutation/lease policy as `script.eval`. Still outstanding in this wave:
 actions, menu commands, advisory ES3 validation, watch polling, COM inventory
 discovery, enum/signature introspection, and large-result artifacts.
 
+## Installation and upgrades
+
+The per-user installer keeps immutable side-by-side versions under
+`%LOCALAPPDATA%\Programs\ComToolV2\versions\` and exposes the active
+version through the stable `%LOCALAPPDATA%\Programs\ComToolV2\current\`
+junction. Configure integrations against `current\ComTool.Cli.exe`,
+`current\ComTool.RuntimeHost.exe`, or `current\ComTool.Transport.Mcp.exe`
+rather than a version-specific path. Upgrades verify the new payload before
+switching the stable path; uninstalling the current version rolls back to the
+newest remaining verified version.
+
+Durable state is separate at `%LOCALAPPDATA%\ComToolV2`. Only one runtime
+process may own a given state root at a time; custom-pipe/shadow runtimes must
+use distinct `--state-dir` values. `core.targets.list` exposes any durable
+`activeIncident` descriptor so a restarted agent can recover the request ID
+and reconciliation fingerprint needed to resolve an ambiguous mutation.
+
 ## Verification
 
-The current deterministic gate is **285/285 passing**. It covers protocol,
+The current deterministic gate is **296/296 passing**. It covers protocol,
 runtime/catalog policy, supervisor and durable reconciliation, Illustrator COM
 and document-operation adapters, length-prefixed pipe, NDJSON stdio, and the
-MCP bridge. Run it with:
+MCP bridge. The schema gate additionally validates **31/31** protocol/schema
+cases, including the live operation-registry snapshot. Run the deterministic
+test suite with:
 
 ```powershell
 scripts/dotnet.ps1 build ComTool.V2.slnx -c Release

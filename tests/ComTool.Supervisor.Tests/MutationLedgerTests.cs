@@ -43,6 +43,65 @@ public sealed class MutationLedgerTests : IDisposable
     }
 
     [Fact]
+    public void ListUnresolvedEnumeratesPreparedMutationWithoutLiveTargetDiscovery()
+    {
+        var ledger = new MutationLedger(_root);
+        var target = Target();
+        var request = Request(
+            "req-list-unresolved",
+            """{"kind":"code","source":"return 1;"}""");
+
+        _ = ledger.Begin(
+            target,
+            request,
+            MutationClass.Unknown);
+
+        var reopened = new MutationLedger(_root);
+        var incidents = reopened.ListUnresolved();
+
+        var incident = Assert.Single(incidents);
+        Assert.Equal(
+            target.Identity.TargetId,
+            incident.TargetId);
+        Assert.Equal(
+            request.Id,
+            incident.RequestId);
+        Assert.Equal(
+            request.Operation,
+            incident.Operation);
+        Assert.Equal(
+            MutationLedgerPhase.Prepared,
+            incident.Phase);
+    }
+
+    [Fact]
+    public void ListUnresolvedSurfacesCorruptActiveMarkerFailClosed()
+    {
+        var ledger = new MutationLedger(_root);
+        var activeDirectory = Path.Combine(_root, "active");
+        File.WriteAllText(
+            Path.Combine(activeDirectory, "corrupt-marker.json"),
+            "{broken");
+
+        var incidents = ledger.ListUnresolved();
+
+        var incident = Assert.Single(incidents);
+        Assert.Equal(
+            "mutation_ledger_corrupt",
+            incident.IncidentKind);
+        Assert.Equal(
+            "corrupt-active-record",
+            incident.RequestId);
+        Assert.StartsWith(
+            "corrupt-active:",
+            incident.TargetId,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            MutationLedgerPhase.Ambiguous,
+            incident.Phase);
+    }
+
+    [Fact]
     public void CompletedMutationReplaysStoredResultWithoutNewPrepare()
     {
         var ledger = new MutationLedger(_root);
@@ -184,7 +243,8 @@ public sealed class MutationLedgerTests : IDisposable
 
         ledger.Finalize(
             begin.Record,
-            NotStarted(request));
+            NotStarted(request),
+            executionWasDispatched: false);
 
         Assert.Null(
             ledger.GetUnresolvedTarget(
@@ -201,6 +261,112 @@ public sealed class MutationLedgerTests : IDisposable
         Assert.Equal(
             MutationLedgerPhase.Prepared,
             retry.Record.Phase);
+    }
+
+    [Fact]
+    public void DispatchedNotStartedClaimFailsClosedAsAmbiguous()
+    {
+        var ledger = new MutationLedger(_root);
+        var target = Target();
+        var request = Request(
+            "req-dispatched-not-started",
+            """{"value":42}""");
+
+        var begin = ledger.Begin(
+            target,
+            request,
+            MutationClass.NonIdempotentWrite);
+
+        ledger.Finalize(
+            begin.Record,
+            NotStarted(request));
+
+        var unresolved = ledger.GetUnresolvedTarget(
+            target.Identity.TargetId);
+        Assert.NotNull(unresolved);
+        Assert.Equal(
+            MutationLedgerPhase.Ambiguous,
+            unresolved!.Phase);
+    }
+
+    [Fact]
+    public void FailedResultWithoutErrorFailsClosedAsAmbiguous()
+    {
+        var ledger = new MutationLedger(_root);
+        var target = Target();
+        var request = Request(
+            "req-malformed-failure",
+            """{"value":43}""");
+
+        var begin = ledger.Begin(
+            target,
+            request,
+            MutationClass.NonIdempotentWrite);
+
+        ledger.Finalize(
+            begin.Record,
+            new OperationResult
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = request.Id,
+                Operation = request.Operation,
+                Ok = false,
+                Status = OperationStatus.Failed,
+                TargetState = TargetState.Known
+            });
+
+        var unresolved = ledger.GetUnresolvedTarget(
+            target.Identity.TargetId);
+        Assert.NotNull(unresolved);
+        Assert.Equal(
+            MutationLedgerPhase.Ambiguous,
+            unresolved!.Phase);
+
+        var retry = ledger.Begin(
+            target,
+            request,
+            MutationClass.NonIdempotentWrite);
+        Assert.Equal(
+            MutationLedgerBeginDisposition.Unresolved,
+            retry.Disposition);
+    }
+
+    [Fact]
+    public void LateRuntimeInterruptedSignalCannotDowngradeCompletedResult()
+    {
+        var ledger = new MutationLedger(_root);
+        var target = Target();
+        var request = Request(
+            "req-late-interrupt",
+            """{"value":44}""");
+
+        var begin = ledger.Begin(
+            target,
+            request,
+            MutationClass.NonIdempotentWrite);
+        ledger.Finalize(
+            begin.Record,
+            Success(
+                request,
+                ProtocolValue.FromString("committed")));
+
+        ledger.MarkRuntimeInterrupted(
+            begin.Record,
+            "late_dispatch_interrupted");
+
+        Assert.Null(
+            ledger.GetUnresolvedTarget(
+                target.Identity.TargetId));
+        var replay = ledger.Begin(
+            target,
+            request,
+            MutationClass.NonIdempotentWrite);
+        Assert.Equal(
+            MutationLedgerBeginDisposition.ReplayCompleted,
+            replay.Disposition);
+        Assert.Equal(
+            "committed",
+            replay.StoredResult?.Result?.Value?.GetString());
     }
 
     [Fact]
@@ -285,6 +451,19 @@ public sealed class MutationLedgerTests : IDisposable
         Assert.Equal(
             "runtime_interrupted_mutation",
             supervisor.State.IncidentKind);
+        Assert.NotNull(supervisor.ActiveIncident);
+        Assert.Equal(
+            "req-supervisor-recovery",
+            supervisor.ActiveIncident!.RequestId);
+        Assert.Equal(
+            request.Operation,
+            supervisor.ActiveIncident.Operation);
+        Assert.Equal(
+            MutationClass.Unknown,
+            supervisor.ActiveIncident.MutationClass);
+        Assert.Equal(
+            "prepared",
+            supervisor.ActiveIncident.Phase);
     }
 
     [Fact]
@@ -578,6 +757,7 @@ public sealed class MutationLedgerTests : IDisposable
             new MutationLedger(_root)
                 .GetUnresolvedTarget(
                     target.Identity.TargetId));
+        Assert.Null(supervisor.ActiveIncident);
         Assert.Null(supervisor.Worker);
 
         var oldRequest = original with

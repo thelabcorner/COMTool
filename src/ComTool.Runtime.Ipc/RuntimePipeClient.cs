@@ -60,12 +60,15 @@ public sealed class RuntimePipeClient : IAsyncDisposable
         ProtocolJson.ValidateRequest(request);
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var dispatchBegan = false;
         try
         {
             using var operationCts =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            operationCts.CancelAfter(timeout ?? TimeSpan.FromSeconds(60));
+            if (timeout is { } operationTimeout)
+                operationCts.CancelAfter(operationTimeout);
 
+            dispatchBegan = true;
             await _framed
                 .WriteAsync(
                     ProtocolJson.SerializeUtf8(request),
@@ -90,6 +93,12 @@ public sealed class RuntimePipeClient : IAsyncDisposable
             }
 
             return result;
+        }
+        catch (Exception ex) when (dispatchBegan)
+        {
+            throw new RuntimeRequestInterruptedException(
+                request,
+                ex);
         }
         finally
         {

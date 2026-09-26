@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using ComTool.Protocol;
 using ComTool.Runtime;
@@ -7,10 +8,27 @@ using ComTool.Transport.Stdio;
 
 internal static class Program
 {
+    private static readonly Assembly ExecutingAssembly =
+        typeof(Program).Assembly;
+    private static readonly string ProductVersion =
+        ExecutingAssembly.GetName().Version?.ToString() ?? "unknown";
+    private static readonly string InformationalVersion =
+        ExecutingAssembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion
+        ?? ProductVersion;
+
     private static async Task<int> Main(string[] args)
     {
         try
         {
+            if (args.Length > 0 &&
+                args[0] is "--help" or "-h" or "help")
+                return WriteHelp();
+            if (args.Length > 0 &&
+                args[0] is "--version" or "-v" or "version")
+                return WriteVersion();
+
             var stdio = HasFlag(args, "--stdio");
             var workerPath = ResolveWorkerPath(GetOption(args, "--worker"));
             var pipeName = RuntimeEndpoint.ResolvePipeName(
@@ -52,7 +70,9 @@ internal static class Program
                 {
                     WorkerExecutablePath = workerPath
                 },
-                stateDirectory);
+                stateDirectory,
+                runtimeEndpoint: stdio ? null : pipeName,
+                frontEnd: stdio ? "stdio" : "pipe");
 
             await using (runtime.ConfigureAwait(false))
             {
@@ -130,6 +150,37 @@ internal static class Program
                     message
                 }
             }));
+    }
+
+    private static int WriteHelp()
+    {
+        Console.Out.WriteLine(JsonSerializer.Serialize(new
+        {
+            ok = true,
+            component = "ComTool.RuntimeHost",
+            version = ProductVersion,
+            informationalVersion = InformationalVersion,
+            protocolVersion = ProtocolVersion.Current,
+            usage = new[]
+            {
+                "ComTool.RuntimeHost.exe [--worker <path>] [--pipe <name>] [--state-dir <path>] [--host <host> ...]",
+                "ComTool.RuntimeHost.exe --stdio [--worker <path>] [--state-dir <path>] [--host <host> ...]"
+            }
+        }));
+        return 0;
+    }
+
+    private static int WriteVersion()
+    {
+        Console.Out.WriteLine(JsonSerializer.Serialize(new
+        {
+            ok = true,
+            component = "ComTool.RuntimeHost",
+            version = ProductVersion,
+            informationalVersion = InformationalVersion,
+            protocolVersion = ProtocolVersion.Current
+        }));
+        return 0;
     }
 
     /// <summary>

@@ -76,6 +76,32 @@ public sealed class TargetSupervisor : IAsyncDisposable
 
     public TargetLeaseStatus LeaseStatus => _leases.Status;
 
+    public ActiveMutationIncident? ActiveIncident
+    {
+        get
+        {
+            var active = _mutationLedger?.GetUnresolvedTarget(
+                _target.Identity.TargetId);
+            return active is null
+                ? null
+                : new ActiveMutationIncident(
+                    active.RequestId,
+                    active.Operation,
+                    active.MutationClass,
+                    active.Phase switch
+                    {
+                        MutationLedgerPhase.Prepared => "prepared",
+                        MutationLedgerPhase.Ambiguous => "ambiguous",
+                        _ => throw new InvalidOperationException(
+                            $"Resolved mutation phase '{active.Phase}' cannot be exposed as an active incident.")
+                    },
+                    active.PreparedAt,
+                    active.UpdatedAt,
+                    active.IncidentKind,
+                    active.ReconciliationFingerprint);
+        }
+    }
+
     public BrokerWorkerStatus? Worker =>
         _worker is { IsAlive: true } worker
             ? worker.Worker
@@ -350,6 +376,23 @@ public sealed class TargetSupervisor : IAsyncDisposable
                                 ? ["reconcile_target_before_mutation"]
                                 : ["ping_or_reconnect_target"],
                         retryable: ex.Retryable);
+                }
+
+                if (mutationClass != MutationClass.ReadOnly &&
+                    _mutationLedger is null)
+                {
+                    return Failure(
+                        request,
+                        OperationStatus.Failed,
+                        _state.Snapshot().State,
+                        "mutation_ledger_unavailable",
+                        "Mutating operations require a durable mutation ledger. Use the persistent runtime instead of an untracked direct supervisor.",
+                        ExecutionState.NotStarted,
+                        suggestedActions:
+                        [
+                            "use_persistent_runtime",
+                            "do_not_execute_mutation"
+                        ]);
                 }
 
                 var hasPreconditions =
@@ -1666,7 +1709,8 @@ public sealed class TargetSupervisor : IAsyncDisposable
                     "worker_start_failed",
                     exception.Message,
                     ExecutionState.NotStarted,
-                    hresult: exception.HResult));
+                    hresult: exception.HResult),
+                executionWasDispatched: false);
         }
         catch (MutationLedgerException)
         {
@@ -1775,3 +1819,13 @@ public sealed class TargetSupervisor : IAsyncDisposable
             Volatile.Read(ref _disposed) != 0,
             this);
 }
+
+public sealed record ActiveMutationIncident(
+    string RequestId,
+    string Operation,
+    MutationClass MutationClass,
+    string Phase,
+    DateTimeOffset PreparedAt,
+    DateTimeOffset UpdatedAt,
+    string? IncidentKind,
+    string? ReconciliationFingerprint);

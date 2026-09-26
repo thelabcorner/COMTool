@@ -178,10 +178,54 @@ public sealed class RuntimePipeTests
 
         await using var client = await RuntimePipeClient.ConnectAsync(pipeName);
 
-        await Assert.ThrowsAsync<InvalidDataException>(
+        var ex = await Assert.ThrowsAsync<RuntimeRequestInterruptedException>(
             () => client.ExecuteAsync(
                 Request("expected-id", "core.test")));
 
+        Assert.Equal(
+            ExecutionState.Ambiguous,
+            ex.Execution);
+        Assert.Equal(
+            "expected-id",
+            ex.RequestId);
+
+        serverCts.Cancel();
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ExplicitClientTimeoutFailsClosedAsAmbiguous()
+    {
+        var pipeName = UniquePipe();
+        using var serverCts = new CancellationTokenSource();
+
+        var server = new RuntimePipeServer(
+            async (request, _) =>
+            {
+                await Task.Delay(200);
+                return Success(
+                    request,
+                    ProtocolValue.FromString("late"));
+            },
+            pipeName);
+
+        var serverTask = server.RunAsync(serverCts.Token);
+        await using var client = await RuntimePipeClient.ConnectAsync(pipeName);
+        var request = Request("timeout-ambiguous", "core.test");
+
+        var ex = await Assert.ThrowsAsync<RuntimeRequestInterruptedException>(
+            () => client.ExecuteAsync(
+                request,
+                timeout: TimeSpan.FromMilliseconds(20)));
+
+        Assert.Equal(
+            ExecutionState.Ambiguous,
+            ex.Execution);
+        Assert.Equal(
+            request.Id,
+            ex.RequestId);
+
+        await Task.Delay(250);
         serverCts.Cancel();
         await serverTask;
     }

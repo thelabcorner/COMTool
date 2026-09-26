@@ -1081,7 +1081,7 @@ internal sealed class IllustratorSession : IHostSession
                 Message = $"Illustrator adapter does not support '{request.Operation}'.",
                 Retryable = false,
                 Execution = ExecutionState.NotStarted,
-                SuggestedActions = ["query_capabilities"]
+                SuggestedActions = ["core.target.capabilities"]
             }
         };
 

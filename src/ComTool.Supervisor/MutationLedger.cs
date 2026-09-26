@@ -299,16 +299,67 @@ internal sealed class MutationLedger
         }
     }
 
+    public IReadOnlyList<MutationLedgerRecord> ListUnresolved()
+    {
+        lock (_gate)
+        {
+            var unresolved = new List<MutationLedgerRecord>();
+
+            foreach (var path in Directory
+                         .EnumerateFiles(
+                             _activeDirectory,
+                             "*.json",
+                             SearchOption.TopDirectoryOnly)
+                         .Order(StringComparer.Ordinal))
+            {
+                try
+                {
+                    var active = ReadRequired(path);
+                    var record = TryReadRecord(
+                        GetRecordPath(
+                            active.TargetId,
+                            active.RequestId));
+                    var effective = record ?? active;
+
+                    if (IsResolvedOrInactive(effective.Phase))
+                    {
+                        TryDelete(path);
+                        continue;
+                    }
+
+                    if (effective.Phase is
+                        MutationLedgerPhase.Prepared or
+                        MutationLedgerPhase.Ambiguous)
+                    {
+                        unresolved.Add(effective);
+                    }
+                }
+                catch (MutationLedgerException)
+                {
+                    unresolved.Add(
+                        MutationLedgerRecord.CorruptActive(
+                            "corrupt-active:" +
+                            Path.GetFileNameWithoutExtension(path)));
+                }
+            }
+
+            return unresolved;
+        }
+    }
+
     public void Finalize(
         MutationLedgerRecord prepared,
-        OperationResult result)
+        OperationResult result,
+        bool executionWasDispatched = true)
     {
         ArgumentNullException.ThrowIfNull(prepared);
         ArgumentNullException.ThrowIfNull(result);
 
         lock (_gate)
         {
-            var phase = ClassifyTerminalPhase(result);
+            var phase = ClassifyTerminalPhase(
+                result,
+                executionWasDispatched);
             var incidentKind =
                 phase == MutationLedgerPhase.Ambiguous
                     ? result.Error?.Kind ?? "mutation_outcome_ambiguous"
@@ -354,18 +405,30 @@ internal sealed class MutationLedger
 
         lock (_gate)
         {
-            var ambiguous = prepared with
+            var recordPath = GetRecordPath(
+                prepared.TargetId,
+                prepared.RequestId);
+            var existing = TryReadRecord(recordPath);
+            if (existing is not null &&
+                existing.Phase is
+                    MutationLedgerPhase.Completed or
+                    MutationLedgerPhase.ResolvedChanged or
+                    MutationLedgerPhase.ResolvedUnchanged)
+            {
+                // A late interruption signal must never downgrade an already
+                // durable terminal outcome or destroy its replayable result.
+                return;
+            }
+
+            var source = existing ?? prepared;
+            var ambiguous = source with
             {
                 Phase = MutationLedgerPhase.Ambiguous,
                 UpdatedAt = DateTimeOffset.UtcNow,
                 IncidentKind = incidentKind
             };
 
-            WriteAtomic(
-                GetRecordPath(
-                    ambiguous.TargetId,
-                    ambiguous.RequestId),
-                ambiguous);
+            WriteAtomic(recordPath, ambiguous);
             WriteAtomic(
                 GetActivePath(ambiguous.TargetId),
                 ambiguous);
@@ -518,6 +581,19 @@ internal sealed class MutationLedger
                 throw new MutationLedgerException(
                     "mutation_ledger_schema_mismatch",
                     $"Unsupported mutation ledger schema version {record.SchemaVersion}.");
+            }
+
+            if (string.IsNullOrWhiteSpace(record.TargetId) ||
+                string.IsNullOrWhiteSpace(record.Host) ||
+                string.IsNullOrWhiteSpace(record.RequestId) ||
+                string.IsNullOrWhiteSpace(record.RequestFingerprint) ||
+                string.IsNullOrWhiteSpace(record.Operation) ||
+                !Enum.IsDefined(record.MutationClass) ||
+                !Enum.IsDefined(record.Phase))
+            {
+                throw new MutationLedgerException(
+                    "mutation_ledger_corrupt",
+                    $"Mutation ledger record '{path}' is missing required identity/operation fields or contains an invalid enum value.");
             }
 
             return record;
@@ -799,19 +875,35 @@ internal sealed class MutationLedger
             MutationLedgerPhase.ResolvedUnchanged;
 
     private static MutationLedgerPhase ClassifyTerminalPhase(
-        OperationResult result)
+        OperationResult result,
+        bool executionWasDispatched)
     {
+        var execution = result.Error?.Execution;
+
         if (result.Ok ||
-            result.Error?.Execution == ExecutionState.Completed)
+            execution == ExecutionState.Completed)
             return MutationLedgerPhase.Completed;
 
-        if (result.TargetState == TargetState.ReconciliationRequired ||
-            result.Error?.Execution is
+        if (result.Status == OperationStatus.ReconciliationRequired ||
+            result.TargetState == TargetState.ReconciliationRequired ||
+            execution is null ||
+            execution is
                 ExecutionState.Started or
                 ExecutionState.Ambiguous)
             return MutationLedgerPhase.Ambiguous;
 
-        return MutationLedgerPhase.NotStarted;
+        if (execution == ExecutionState.NotStarted)
+        {
+            // Once the worker dispatch boundary has been crossed, a returned
+            // NotStarted claim is not strong enough to erase the durable
+            // prepared marker. A buggy/older worker must not be able to make
+            // a possibly executed mutation replayable.
+            return executionWasDispatched
+                ? MutationLedgerPhase.Ambiguous
+                : MutationLedgerPhase.NotStarted;
+        }
+
+        return MutationLedgerPhase.Ambiguous;
     }
 }
 

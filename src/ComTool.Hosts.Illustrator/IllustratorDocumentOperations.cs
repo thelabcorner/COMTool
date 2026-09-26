@@ -108,7 +108,7 @@ internal static class IllustratorDocumentOperations
                     "unsupported_operation",
                     $"Document lifecycle does not support '{request.Operation}'.",
                     ExecutionState.NotStarted,
-                    ["query_capabilities"])
+                    ["core.target.capabilities"])
             };
         }
         catch (HostAdapterException ex)

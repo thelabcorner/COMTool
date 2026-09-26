@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace ComTool.Supervisor;
@@ -16,11 +18,12 @@ public sealed class RuntimeStateLayoutException(
 /// The root manifest is intentionally separate from per-record schema versions
 /// so upgrades cannot silently reinterpret an incompatible directory layout.
 /// </summary>
-public sealed class RuntimeStateLayout
+public sealed class RuntimeStateLayout : IDisposable
 {
     public const int CurrentSchemaVersion = 1;
     private const string ManifestFormat = "comtool-v2-state";
     private const string ManifestFileName = "state-manifest.json";
+    private const string OwnerLockFileName = ".runtime-owner.lock";
 
     private static readonly JsonSerializerOptions Json =
         new(JsonSerializerDefaults.Web)
@@ -28,9 +31,18 @@ public sealed class RuntimeStateLayout
             WriteIndented = true
         };
 
-    private RuntimeStateLayout(string root)
+    private readonly Semaphore _ownerSemaphore;
+    private readonly FileStream _ownerLock;
+    private int _disposed;
+
+    private RuntimeStateLayout(
+        string root,
+        Semaphore ownerSemaphore,
+        FileStream ownerLock)
     {
         Root = root;
+        _ownerSemaphore = ownerSemaphore;
+        _ownerLock = ownerLock;
         ManifestPath = Path.Combine(root, ManifestFileName);
         MutationLedgerRoot = Path.Combine(root, "mutation-ledger");
         WorkflowRoot = Path.Combine(root, "workflows");
@@ -53,12 +65,54 @@ public sealed class RuntimeStateLayout
             string.IsNullOrWhiteSpace(root)
                 ? DefaultRoot
                 : root);
-        var layout = new RuntimeStateLayout(resolved);
+        Semaphore? ownerSemaphore = null;
+        var ownerSemaphoreHeld = false;
+        FileStream? ownerLock = null;
 
         try
         {
-            Directory.CreateDirectory(layout.Root);
+            ownerSemaphore = new Semaphore(
+                initialCount: 1,
+                maximumCount: 1,
+                name: GetOwnerSemaphoreName(resolved));
+            ownerSemaphoreHeld = ownerSemaphore.WaitOne(0);
+            if (!ownerSemaphoreHeld)
+            {
+                throw new RuntimeStateLayoutException(
+                    "runtime_state_in_use",
+                    $"State directory '{resolved}' is already owned by another COM Tool V2 runtime.");
+            }
+
+            Directory.CreateDirectory(resolved);
+
+            var lockPath = Path.Combine(resolved, OwnerLockFileName);
+            try
+            {
+                ownerLock = new FileStream(
+                    lockPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 4096,
+                    FileOptions.WriteThrough);
+            }
+            catch (IOException ex)
+            {
+                throw new RuntimeStateLayoutException(
+                    "runtime_state_in_use",
+                    $"State directory '{resolved}' is already owned by another COM Tool V2 runtime.",
+                    ex);
+            }
+
+            WriteOwnerDiagnostic(ownerLock);
+            var layout = new RuntimeStateLayout(
+                resolved,
+                ownerSemaphore,
+                ownerLock);
             layout.EnsureManifest();
+            ownerSemaphore = null;
+            ownerSemaphoreHeld = false;
+            ownerLock = null;
             return layout;
         }
         catch (RuntimeStateLayoutException)
@@ -75,6 +129,72 @@ public sealed class RuntimeStateLayout
                 $"Could not open runtime state directory '{resolved}': {ex.Message}",
                 ex);
         }
+        finally
+        {
+            ownerLock?.Dispose();
+            if (ownerSemaphoreHeld)
+            {
+                try
+                {
+                    ownerSemaphore?.Release();
+                }
+                catch (SemaphoreFullException)
+                {
+                }
+            }
+            ownerSemaphore?.Dispose();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        try
+        {
+            _ownerLock.Dispose();
+        }
+        finally
+        {
+            try
+            {
+                _ownerSemaphore.Release();
+            }
+            catch (SemaphoreFullException)
+            {
+            }
+            _ownerSemaphore.Dispose();
+        }
+    }
+
+    public static string GetOwnerSemaphoreName(string root)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+
+        var canonical = Path.GetFullPath(root).ToLowerInvariant();
+        using var sha = SHA256.Create();
+        var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(canonical));
+        return "Local\\ComToolV2State_" +
+            Convert.ToHexString(hash.AsSpan(0, 12));
+    }
+
+    private static void WriteOwnerDiagnostic(FileStream stream)
+    {
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        var payload = JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                processId = Environment.ProcessId,
+                processStartedAt = new DateTimeOffset(process.StartTime),
+                acquiredAt = DateTimeOffset.UtcNow
+            },
+            Json);
+
+        stream.SetLength(0);
+        stream.Position = 0;
+        stream.Write(payload);
+        stream.Flush(flushToDisk: true);
     }
 
     private void EnsureManifest()

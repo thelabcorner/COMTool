@@ -17,6 +17,12 @@ public static class BuiltInOperations
             Scope: OperationExecutionScope.Runtime),
 
         new OperationDefinition(
+            "core.incidents.list",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime),
+
+        new OperationDefinition(
             "core.targets.list",
             MutationClass.ReadOnly,
             RequiresTarget: false,
@@ -83,13 +89,15 @@ public static class BuiltInOperations
             "core.target.lease.renew",
             MutationClass.ReadOnly,
             RequiresTarget: true,
-            Scope: OperationExecutionScope.Runtime),
+            Scope: OperationExecutionScope.Runtime,
+            RequiresLease: true),
 
         new OperationDefinition(
             "core.target.lease.release",
             MutationClass.ReadOnly,
             RequiresTarget: true,
-            Scope: OperationExecutionScope.Runtime),
+            Scope: OperationExecutionScope.Runtime,
+            RequiresLease: true),
 
         new OperationDefinition(
             "core.target.status",

@@ -8,7 +8,15 @@ internal static class Program
         var root = FindV2Root(args.FirstOrDefault());
         var schemaDir = Path.Combine(root, "schemas", "v1-draft");
         var casesPath = Path.Combine(root, "fixtures", "protocol", "cases.json");
-        var operationRegistryPath = Path.Combine(root, "protocol", "operation-registry.json");
+        var currentRegistrySchemaPath = Path.Combine(
+            root,
+            "schemas",
+            "v1",
+            "operation-registry.schema.json");
+        var currentRegistryPath = Path.Combine(
+            root,
+            "protocol",
+            "operation-registry.json");
 
         Dialect.Default = Dialect.Draft202012;
 
@@ -68,6 +76,34 @@ internal static class Program
                 schemaLocation = ok ? null : result.SchemaLocation.ToString()
             });
         }
+
+        var currentRegistrySchema = JsonSchema.FromFile(
+            currentRegistrySchemaPath);
+        using var currentRegistryDocument = JsonDocument.Parse(
+            File.ReadAllText(currentRegistryPath));
+        var currentRegistryResult = currentRegistrySchema.Evaluate(
+            currentRegistryDocument.RootElement,
+            evaluationOptions);
+        total++;
+        if (currentRegistryResult.IsValid)
+            matched++;
+        caseResults.Add(new
+        {
+            name = "current-operation-registry",
+            schema = "schemas/v1/operation-registry.schema.json",
+            expectedValid = true,
+            actualValid = currentRegistryResult.IsValid,
+            ok = currentRegistryResult.IsValid,
+            errors = currentRegistryResult.IsValid
+                ? null
+                : currentRegistryResult.Errors,
+            instanceLocation = currentRegistryResult.IsValid
+                ? null
+                : currentRegistryResult.InstanceLocation.ToString(),
+            schemaLocation = currentRegistryResult.IsValid
+                ? null
+                : currentRegistryResult.SchemaLocation.ToString()
+        });
 
         var report = new
         {

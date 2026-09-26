@@ -1,6 +1,6 @@
 # V2 Protocol Schema Validator
 
-Validates the draft protocol fixtures against the checked-in JSON Schema 2020-12 contracts.
+Validates the draft protocol fixtures against the checked-in JSON Schema 2020-12 contracts and validates the live checked-in operation-registry snapshot against its current V1 schema.
 
 The validator intentionally:
 

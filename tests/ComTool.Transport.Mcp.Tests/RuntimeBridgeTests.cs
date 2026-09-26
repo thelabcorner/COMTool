@@ -75,7 +75,37 @@ public sealed class RuntimeBridgeTests
         Assert.Equal("mcp-unreachable", result.Id);
         Assert.Equal("core.runtime.health", result.Operation);
         Assert.Equal("runtime_unreachable", result.Error?.Kind);
-        Assert.False(result.Error?.Retryable);
+        Assert.True(result.Error?.Retryable);
+        Assert.Equal(OperationStatus.Failed, result.Status);
+        Assert.Equal(TargetState.Unavailable, result.TargetState);
+        Assert.Equal(ExecutionState.NotStarted, result.Error?.Execution);
+    }
+
+    [Fact]
+    public async Task CallerCancellationReturnsStructuredTransportCancelledError()
+    {
+        var bridge = new RuntimeBridge();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var json = await bridge.ExecuteAsync(
+            "core.runtime.health",
+            "null",
+            "mcp-cancelled",
+            leaseId: null,
+            targetHost: null,
+            targetId: null,
+            cancellation.Token,
+            pipeName: $"comtool-v2-mcp-test-{Guid.NewGuid():N}");
+
+        var result = ProtocolJson.DeserializeResult(json);
+
+        Assert.False(result.Ok);
+        Assert.Equal("runtime_transport_cancelled", result.Error?.Kind);
+        Assert.True(result.Error?.Retryable);
+        Assert.Equal(OperationStatus.Failed, result.Status);
+        Assert.Equal(TargetState.Unavailable, result.TargetState);
+        Assert.Equal(ExecutionState.NotStarted, result.Error?.Execution);
     }
 
     [Fact]

@@ -839,7 +839,7 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
                 Message = message,
                 Retryable = false,
                 Execution = execution,
-                SuggestedActions = ["query_capabilities"]
+                SuggestedActions = ["core.target.capabilities"]
             }
         };
 

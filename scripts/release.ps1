@@ -1,3 +1,5 @@
+#Requires -Version 7.0
+
 param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$')]
@@ -32,6 +34,9 @@ if ([string]::IsNullOrWhiteSpace($RuntimeIdentifier) -or
     $RuntimeIdentifier -notmatch $RuntimeIdentifierPattern) {
     throw "Runtime identifier '$RuntimeIdentifier' is invalid."
 }
+if ($SkipTests -and -not $AllowDirty) {
+    throw "-SkipTests is permitted only with -AllowDirty for non-production validation."
+}
 
 $releaseRoot = Join-Path $root ".artifacts\release"
 $artifactName = "$Version-$RuntimeIdentifier"
@@ -43,6 +48,9 @@ $publishRoot = Join-Path $stagingRoot "publish"
 $packageRoot = Join-Path $stagingRoot "package"
 $zipName = "ComToolV2-$Version-$RuntimeIdentifier.zip"
 $zipPath = Join-Path $stagingRoot $zipName
+$sdkArtifactsRoot = Join-Path ([IO.Path]::GetTempPath()) (
+    "ctv2-sdk-" + [Guid]::NewGuid().ToString("N")
+)
 
 function Invoke-Checked {
     param(
@@ -61,6 +69,34 @@ function Invoke-Checked {
 function Get-Sha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Assert-SourceStable {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExpectedCommit,
+        [Parameter(Mandatory = $true)][bool]$AllowDirtySource
+    )
+
+    $currentCommit = (& git -C $root rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or
+        -not [string]::Equals(
+            $currentCommit,
+            $ExpectedCommit,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Source commit changed while the release transaction was running."
+    }
+
+    if (-not $AllowDirtySource) {
+        $currentDirtyLines = @(
+            & git -C $root status --porcelain=v1 --untracked-files=all -- .
+        )
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not revalidate Git status before release finalization."
+        }
+        if ($currentDirtyLines.Count -gt 0) {
+            throw "COM Tool V2 changed while the release transaction was running. Refusing to finalize a production artifact."
+        }
+    }
 }
 
 function Get-NuGetVulnerabilityCount {
@@ -122,6 +158,51 @@ if (-not (Test-Path -LiteralPath $dotnet)) {
     throw "Project-local dotnet wrapper was not found at '$dotnet'."
 }
 
+$globalJsonPath = Join-Path $root "global.json"
+$mcpProjectPath = Join-Path $root "src\ComTool.Transport.Mcp\ComTool.Transport.Mcp.csproj"
+$protocolVersionPath = Join-Path $root "src\ComTool.Protocol\ProtocolVersion.cs"
+$attributionPath = Join-Path $root "..\ATTRIBUTION.md"
+if (-not (Test-Path -LiteralPath $globalJsonPath -PathType Leaf)) {
+    throw "global.json was not found at '$globalJsonPath'."
+}
+if (-not (Test-Path -LiteralPath $mcpProjectPath -PathType Leaf)) {
+    throw "MCP adapter project was not found at '$mcpProjectPath'."
+}
+if (-not (Test-Path -LiteralPath $protocolVersionPath -PathType Leaf)) {
+    throw "Protocol version source was not found at '$protocolVersionPath'."
+}
+if (-not (Test-Path -LiteralPath $attributionPath -PathType Leaf)) {
+    throw "Package attribution file was not found at '$attributionPath'."
+}
+
+$globalConfig = Get-Content -LiteralPath $globalJsonPath -Raw | ConvertFrom-Json
+$dotnetSdkVersion = [string]$globalConfig.sdk.version
+if ([string]::IsNullOrWhiteSpace($dotnetSdkVersion)) {
+    throw "global.json does not contain a pinned .NET SDK version."
+}
+
+[xml]$mcpProjectXml = Get-Content -LiteralPath $mcpProjectPath -Raw
+$mcpPackageReference = @(
+    $mcpProjectXml.Project.ItemGroup.PackageReference |
+        Where-Object { [string]$_.Include -eq "ModelContextProtocol" }
+)
+if ($mcpPackageReference.Count -ne 1) {
+    throw "MCP adapter must contain exactly one ModelContextProtocol package reference."
+}
+$mcpSdkVersion = [string]$mcpPackageReference[0].Version
+if ([string]::IsNullOrWhiteSpace($mcpSdkVersion)) {
+    throw "ModelContextProtocol package reference does not contain a pinned version."
+}
+
+$protocolVersionSource = Get-Content -LiteralPath $protocolVersionPath -Raw
+$protocolVersionMatch = [regex]::Match(
+    $protocolVersionSource,
+    'public\s+const\s+int\s+Current\s*=\s*(\d+)\s*;')
+if (-not $protocolVersionMatch.Success) {
+    throw "Could not resolve ProtocolVersion.Current from '$protocolVersionPath'."
+}
+$protocolVersion = [int]$protocolVersionMatch.Groups[1].Value
+
 $gitRoot = (& git -C $root rev-parse --show-toplevel 2>$null)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitRoot)) {
     throw "COM Tool V2 must be released from a Git worktree."
@@ -145,7 +226,7 @@ if (Test-Path -LiteralPath $artifactRoot) {
     throw "Release artifact '$artifactName' already exists. Release versions are immutable; choose a new version."
 }
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
-New-Item -ItemType Directory -Force -Path $publishRoot, $packageRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $publishRoot, $packageRoot, $sdkArtifactsRoot | Out-Null
 
 try {
     Invoke-Checked {
@@ -170,12 +251,19 @@ try {
         throw "NuGet vulnerability audit found $vulnerabilityCount known vulnerability record(s)."
     }
 
+    Invoke-Checked {
+        & $dotnet run --project (Join-Path $root "tools\schema-validator\SchemaValidator.csproj") -c Release --no-restore -- $root
+    } "Protocol/schema metadata validation"
+
     if (-not $SkipTests) {
         Invoke-Checked {
-            & $dotnet build (Join-Path $root "ComTool.V2.slnx") -c Release --no-restore
+            & $dotnet restore (Join-Path $root "ComTool.V2.slnx") --locked-mode --artifacts-path $sdkArtifactsRoot
+        } "Locked isolated gate restore"
+        Invoke-Checked {
+            & $dotnet build (Join-Path $root "ComTool.V2.slnx") -c Release --no-restore --artifacts-path $sdkArtifactsRoot
         } "Release build"
         Invoke-Checked {
-            & $dotnet test (Join-Path $root "ComTool.V2.slnx") -c Release --no-build
+            & $dotnet test (Join-Path $root "ComTool.V2.slnx") -c Release --no-build --artifacts-path $sdkArtifactsRoot
         } "Deterministic test gate"
     }
 
@@ -193,11 +281,11 @@ try {
         $ridLockFile = "packages.$RuntimeIdentifier.lock.json"
 
         Invoke-Checked {
-            & $dotnet restore $projectPath -r $RuntimeIdentifier --locked-mode "-p:NuGetLockFilePath=$ridLockFile"
+            & $dotnet restore $projectPath -r $RuntimeIdentifier --locked-mode --artifacts-path $sdkArtifactsRoot "-p:NuGetLockFilePath=$ridLockFile"
         } "Locked RID restore $name"
 
         Invoke-Checked {
-            & $dotnet publish $projectPath -c Release -r $RuntimeIdentifier --self-contained true --no-restore -o $output "-p:Version=$Version" "-p:InformationalVersion=$Version" "-p:PublishSingleFile=false" "-p:PublishReadyToRun=false" "-p:PublishTrimmed=false" "-p:DebugType=None" "-p:DebugSymbols=false"
+            & $dotnet publish $projectPath -c Release -r $RuntimeIdentifier --self-contained true --no-restore --artifacts-path $sdkArtifactsRoot -o $output "-p:Version=$Version" "-p:InformationalVersion=$Version" "-p:PublishSingleFile=false" "-p:PublishReadyToRun=false" "-p:PublishTrimmed=false" "-p:DebugType=None" "-p:DebugSymbols=false"
         } "Publish $name"
 
         Merge-PublishDirectory -Source $output -Destination $packageRoot
@@ -218,6 +306,7 @@ try {
 
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-user.ps1") -Destination $packageRoot
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "uninstall-user.ps1") -Destination $packageRoot
+    Copy-Item -LiteralPath $attributionPath -Destination (Join-Path $packageRoot "ATTRIBUTION.md")
 
     $signingEnabled =
         -not [string]::IsNullOrWhiteSpace($SignToolPath) -or
@@ -273,6 +362,7 @@ try {
         schemaVersion = 1
         product = "COM Tool V2"
         version = $Version
+        protocolVersion = $protocolVersion
         runtimeIdentifier = $RuntimeIdentifier
         configuration = "Release"
         source = [ordered]@{
@@ -284,6 +374,16 @@ try {
             includeTransitive = $true
             vulnerabilityRecords = $vulnerabilityCount
             sources = @($dependencyAudit.sources)
+        }
+        toolchain = [ordered]@{
+            dotnetSdk = $dotnetSdkVersion
+            modelContextProtocol = $mcpSdkVersion
+        }
+        gate = [ordered]@{
+            deterministicTestsExecuted = -not [bool]$SkipTests
+            schemaMetadataValidationExecuted = $true
+            vulnerabilityAuditExecuted = $true
+            packageSmokePowerShell51 = $false
         }
         signing = [ordered]@{
             authenticode = $signingEnabled
@@ -309,10 +409,19 @@ try {
     }
     $sumLines | Set-Content -LiteralPath $sumsPath -Encoding utf8NoBOM
 
+    Invoke-Checked {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-package.ps1") -Source $packageRoot -ExpectedVersion $Version
+    } "Stock Windows PowerShell 5.1 package verification"
+
+    $manifest["gate"]["packageSmokePowerShell51"] = $true
+    $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
+
     Compress-Archive -Path (Join-Path $packageRoot "*") -DestinationPath $zipPath -CompressionLevel Optimal
     $zipHash = Get-Sha256 $zipPath
     "$zipHash  $zipName" |
         Set-Content -LiteralPath "$zipPath.sha256" -Encoding ascii
+
+    Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty)
 
     Move-Item -LiteralPath $stagingRoot -Destination $artifactRoot
 
@@ -337,5 +446,8 @@ try {
 finally {
     if (Test-Path -LiteralPath $stagingRoot) {
         Remove-Item -LiteralPath $stagingRoot -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $sdkArtifactsRoot) {
+        Remove-Item -LiteralPath $sdkArtifactsRoot -Recurse -Force
     }
 }

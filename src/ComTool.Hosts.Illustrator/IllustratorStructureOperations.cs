@@ -59,7 +59,7 @@ internal static class IllustratorStructureOperations
                 OperationStatus.UnsupportedOperation,
                 "unsupported_operation",
                 $"Structure surface does not support '{request.Operation}'.",
-                ["query_capabilities"])
+                ["core.target.capabilities"])
         };
     }
 

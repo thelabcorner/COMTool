@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ComTool.Protocol;
 using ComTool.Runtime;
@@ -131,6 +132,30 @@ public sealed class OperationCatalogIntegrationTests
     }
 
     [Fact]
+    public void LeaseRenewAndReleaseAdvertiseCallerLeaseRequirement()
+    {
+        Assert.False(
+            BuiltInOperations.Catalog
+                .GetRequired("core.target.lease.acquire")
+                .RequiresLease);
+
+        foreach (var name in new[]
+                 {
+                     "core.target.lease.renew",
+                     "core.target.lease.release"
+                 })
+        {
+            var definition =
+                BuiltInOperations.Catalog.GetRequired(name);
+            Assert.Equal(
+                OperationExecutionScope.Runtime,
+                definition.Scope);
+            Assert.True(definition.RequiresTarget);
+            Assert.True(definition.RequiresLease);
+        }
+    }
+
+    [Fact]
     public void WorkflowSubmitInputSchemaIsPresentAndHasSafeBounds()
     {
         var schemaPath = Path.Combine(
@@ -160,9 +185,84 @@ public sealed class OperationCatalogIntegrationTests
                 .GetString());
     }
 
-    private static string FindV2Root()
+    [Fact]
+    public void CheckedInOperationRegistryMatchesRuntimeCatalog()
     {
-        var current = new DirectoryInfo(Environment.CurrentDirectory);
+        var registryPath = Path.Combine(
+            FindV2Root(),
+            "protocol",
+            "operation-registry.json");
+
+        using var document = JsonDocument.Parse(
+            File.ReadAllText(registryPath));
+        var root = document.RootElement;
+
+        Assert.Equal(2, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(
+            ProtocolVersion.Current,
+            root.GetProperty("protocolVersion").GetInt32());
+        Assert.Equal(
+            "ComTool.Runtime.BuiltInOperations.Catalog",
+            root.GetProperty("authority").GetString());
+
+        var entries = root.GetProperty("operations")
+            .EnumerateArray()
+            .ToDictionary(
+                static entry =>
+                    entry.GetProperty("name").GetString()
+                    ?? throw new InvalidDataException(
+                        "Registry operation name is null."),
+                static entry => entry.Clone(),
+                StringComparer.Ordinal);
+
+        Assert.Equal(BuiltInOperations.Catalog.Count, entries.Count);
+
+        foreach (var definition in BuiltInOperations.Catalog.Definitions)
+        {
+            Assert.True(
+                entries.TryGetValue(definition.Name, out var entry),
+                $"Registry is missing '{definition.Name}'.");
+
+            Assert.Equal(
+                definition.Version,
+                entry.GetProperty("version").GetString());
+            Assert.Equal(
+                JsonSerializer.Serialize(definition.MutationClass)
+                    .Trim('"'),
+                entry.GetProperty("mutationClass").GetString());
+            Assert.Equal(
+                definition.RequiresTarget,
+                entry.GetProperty("requiresTarget").GetBoolean());
+            Assert.Equal(
+                definition.Scope == OperationExecutionScope.Runtime
+                    ? "runtime"
+                    : "host",
+                entry.GetProperty("executionScope").GetString());
+            Assert.Equal(
+                definition.Host,
+                entry.GetProperty("host").ValueKind == JsonValueKind.Null
+                    ? null
+                    : entry.GetProperty("host").GetString());
+            Assert.Equal(
+                definition.RequiresLease,
+                entry.GetProperty("requiresLease").GetBoolean());
+            Assert.Equal(
+                definition.MutationResolution ==
+                    MutationResolutionMode.Fixed
+                    ? "fixed"
+                    : "declared_or_unknown",
+                entry.GetProperty("mutationResolution").GetString());
+        }
+    }
+
+    private static string FindV2Root(
+        [CallerFilePath] string sourceFile = "")
+    {
+        var sourceDirectory = Path.GetDirectoryName(sourceFile);
+        var current = new DirectoryInfo(
+            string.IsNullOrWhiteSpace(sourceDirectory)
+                ? Environment.CurrentDirectory
+                : sourceDirectory);
         while (current is not null)
         {
             if (File.Exists(Path.Combine(current.FullName, "ComTool.V2.slnx")))

@@ -33,6 +33,8 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
     private readonly WorkerBrokerOptions _workerOptions;
     private readonly RuntimeStateLayout _stateLayout;
     private readonly MutationLedger _mutationLedger;
+    private readonly string? _runtimeEndpoint;
+    private readonly string _frontEnd;
     private readonly ConcurrentDictionary<string, TargetSupervisor> _supervisors =
         new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, HostTargetDescriptor> _targets =
@@ -52,7 +54,9 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
     public RuntimeSupervisor(
         IEnumerable<string> hosts,
         WorkerBrokerOptions workerOptions,
-        string? stateDirectory = null)
+        string? stateDirectory = null,
+        string? runtimeEndpoint = null,
+        string frontEnd = "embedded")
     {
         ArgumentNullException.ThrowIfNull(hosts);
         ArgumentNullException.ThrowIfNull(workerOptions);
@@ -73,6 +77,10 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
             _stateLayout.MutationLedgerRoot);
         _workflowJobStore = new WorkflowJobStore(
             _stateLayout.WorkflowRoot);
+        _runtimeEndpoint = runtimeEndpoint;
+        _frontEnd = string.IsNullOrWhiteSpace(frontEnd)
+            ? "embedded"
+            : frontEnd;
     }
 
     public IReadOnlyCollection<string> Hosts => _hosts;
@@ -120,7 +128,7 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
                 $"Operation '{request.Operation}' is not registered.",
                 ExecutionState.NotStarted,
                 totalMs: clock.Elapsed.TotalMilliseconds,
-                suggestedActions: ["query_capabilities"]);
+                suggestedActions: ["core.target.capabilities"]);
         }
 
         if (definition.RequiresTarget && request.Target is null)
@@ -166,7 +174,7 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
                     $"Operation '{request.Operation}' is registered for host '{definition.Host}', not '{request.Target.Host}'.",
                     ExecutionState.NotStarted,
                     totalMs: clock.Elapsed.TotalMilliseconds,
-                    suggestedActions: ["query_capabilities"]);
+                    suggestedActions: ["core.target.capabilities"]);
             }
 
             try
@@ -268,18 +276,51 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
         }
         catch (Exception ex)
         {
+            MutationLedgerRecord? durableIncident = null;
+            var failedTargetId = request.Target?.Id;
+            if (!string.IsNullOrEmpty(failedTargetId))
+            {
+                try
+                {
+                    durableIncident =
+                        _mutationLedger.GetUnresolvedTarget(
+                            failedTargetId);
+                }
+                catch (MutationLedgerException)
+                {
+                    // A corrupt/unreadable ledger is itself an uncertainty
+                    // signal. Preserve conservative execution metadata below.
+                    durableIncident = MutationLedgerRecord.CorruptActive(
+                        failedTargetId);
+                }
+            }
+
+            var ambiguous = durableIncident is not null;
             return Failure(
                 request,
-                OperationStatus.Failed,
-                request.Target?.Id is { Length: > 0 } failedTargetId
-                    ? GetKnownState(failedTargetId)
+                ambiguous
+                    ? OperationStatus.ReconciliationRequired
+                    : OperationStatus.Failed,
+                !string.IsNullOrEmpty(failedTargetId)
+                    ? ambiguous
+                        ? TargetState.ReconciliationRequired
+                        : GetKnownState(failedTargetId)
                     : TargetState.Known,
                 "runtime_failure",
                 ex.Message,
-                ExecutionState.NotStarted,
+                ambiguous
+                    ? ExecutionState.Ambiguous
+                    : ExecutionState.NotStarted,
                 totalMs: clock.Elapsed.TotalMilliseconds,
                 hresult: ex.HResult,
-                suggestedActions: ["inspect_runtime"]);
+                suggestedActions:
+                    ambiguous
+                        ?
+                        [
+                            "inspect_mutation_ledger",
+                            "reconcile_target_before_mutation"
+                        ]
+                        : ["inspect_runtime"]);
         }
     }
 
@@ -398,6 +439,7 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
             await supervisor.DisposeAsync().ConfigureAwait(false);
 
         _refreshGate.Dispose();
+        _stateLayout.Dispose();
     }
 
     private async Task<OperationResult> ExecuteRuntimeOperationAsync(
@@ -409,6 +451,8 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
         {
             case "core.runtime.health":
             {
+                var activeIncidents =
+                    _mutationLedger.ListUnresolved();
                 var payload = JsonSerializer.SerializeToElement(new
                 {
                     protocolVersion = ProtocolVersion.Current,
@@ -416,14 +460,63 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
                     runtimeVersion = RuntimeVersion,
                     runtimeInformationalVersion =
                         RuntimeInformationalVersion,
+                    processId = Environment.ProcessId,
+                    frontEnd = _frontEnd,
+                    pipeName = _runtimeEndpoint,
+                    stateRoot = _stateLayout.Root,
+                    workerExecutablePath =
+                        Path.GetFullPath(
+                            _workerOptions.WorkerExecutablePath),
+                    baseDirectory = AppContext.BaseDirectory,
                     stateSchemaVersion =
                         RuntimeStateLayout.CurrentSchemaVersion,
                     uptimeMs = Math.Round(_uptime.Elapsed.TotalMilliseconds, 3),
                     configuredHosts = _hosts,
                     knownTargets = _targets.Count,
                     liveWorkers = _supervisors.Values.Count(
-                        static supervisor => supervisor.Worker is not null)
+                        static supervisor => supervisor.Worker is not null),
+                    activeIncidents = activeIncidents.Count
                 }, RuntimePayloadJson);
+
+                return Success(
+                    request,
+                    ProtocolValue.From(payload),
+                    TargetState.Known,
+                    clock.Elapsed.TotalMilliseconds);
+            }
+
+            case "core.incidents.list":
+            {
+                var incidents = _mutationLedger.ListUnresolved();
+                var payload = JsonSerializer.SerializeToElement(
+                    incidents.Select(static incident => new
+                    {
+                        targetId = incident.TargetId,
+                        host = incident.Host,
+                        processId = incident.ProcessId,
+                        processStartedAt = incident.ProcessStartedAt,
+                        requestId = incident.RequestId,
+                        operation = incident.Operation,
+                        mutationClass = incident.MutationClass,
+                        phase = incident.Phase switch
+                        {
+                            MutationLedgerPhase.Prepared => "prepared",
+                            MutationLedgerPhase.Ambiguous => "ambiguous",
+                            _ => throw new InvalidOperationException(
+                                $"Inactive mutation phase '{incident.Phase}' cannot be listed as unresolved.")
+                        },
+                        incidentKind = incident.IncidentKind,
+                        reconciliationFingerprint =
+                            incident.ReconciliationFingerprint,
+                        preparedAt = incident.PreparedAt,
+                        updatedAt = incident.UpdatedAt,
+                        recordCorrupt =
+                            string.Equals(
+                                incident.IncidentKind,
+                                "mutation_ledger_corrupt",
+                                StringComparison.Ordinal)
+                    }).ToArray(),
+                    RuntimePayloadJson);
 
                 return Success(
                     request,
@@ -474,7 +567,8 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
                             target.Running,
                             capabilities = target.Capabilities,
                             runtimeState = supervisor?.State,
-                            lease = supervisor?.LeaseStatus
+                            lease = supervisor?.LeaseStatus,
+                            activeIncident = supervisor?.ActiveIncident
                         };
                     }).ToArray(),
                     RuntimePayloadJson);
@@ -504,7 +598,8 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
                                 target = managed.Descriptor.Target,
                                 capabilities = managed.Descriptor.Capabilities,
                                 runtimeState = managed.Supervisor.State,
-                                lease = managed.Supervisor.LeaseStatus
+                                lease = managed.Supervisor.LeaseStatus,
+                                activeIncident = managed.Supervisor.ActiveIncident
                             }, RuntimePayloadJson);
 
                             return Task.FromResult(Success(

@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Reflection;
+using System.Text.Json;
 using ComTool.Hosts.Abstractions;
 using ComTool.Hosts.Illustrator;
 using ComTool.Protocol;
@@ -8,6 +9,16 @@ using ComTool.Supervisor;
 
 internal static class Program
 {
+    private static readonly Assembly ExecutingAssembly =
+        typeof(Program).Assembly;
+    private static readonly string ProductVersion =
+        ExecutingAssembly.GetName().Version?.ToString() ?? "unknown";
+    private static readonly string InformationalVersion =
+        ExecutingAssembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion
+        ?? ProductVersion;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -26,6 +37,8 @@ internal static class Program
 
             if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
                 return WriteHelp();
+            if (args[0] is "--version" or "-v" or "version")
+                return WriteVersion();
 
             var brokered = HasFlag(args, "--broker");
             var runtime = HasFlag(args, "--runtime");
@@ -38,6 +51,11 @@ internal static class Program
             {
                 "health" => RunRuntimeOperation(
                     "core.runtime.health",
+                    requestedTargetId: null,
+                    requiresTarget: false,
+                    pipeName: ParseOption(args, "--pipe")),
+                "incidents" => RunRuntimeOperation(
+                    "core.incidents.list",
                     requestedTargetId: null,
                     requiresTarget: false,
                     pipeName: ParseOption(args, "--pipe")),
@@ -154,12 +172,32 @@ internal static class Program
                 ex.Kind,
                 ex.Message,
                 ex.Retryable ? ["retry"] : ["inspect_host_state"],
-                ex.HResultCode);
+                ex.HResultCode,
+                ex.Retryable,
+                ex.Execution);
+        }
+        catch (RuntimeUnavailableException ex)
+        {
+            return WriteError(
+                "runtime_unreachable",
+                $"Could not connect to COM Tool V2 runtime pipe '{ex.PipeName}': {ex.InnerException?.Message ?? ex.Message}",
+                ["start_runtime", "inspect_runtime"],
+                retryable: true,
+                execution: ExecutionState.NotStarted);
+        }
+        catch (RuntimeRequestInterruptedException ex)
+        {
+            return WriteError(
+                "runtime_request_interrupted",
+                ex.Message,
+                ["inspect_runtime", "inspect_mutation_ledger"],
+                retryable: false,
+                execution: ex.Execution);
         }
         catch (Exception ex)
         {
             return WriteError(
-                ex.GetType().Name,
+                "cli_failure",
                 ex.Message,
                 ["inspect_runtime"]);
         }
@@ -764,10 +802,7 @@ internal static class Program
         IReadOnlyList<OperationCondition>? postconditions = null,
         string? pipeName = null)
     {
-        var client = RuntimePipeClient
-            .ConnectAsync(pipeName)
-            .GetAwaiter()
-            .GetResult();
+        var client = ConnectRuntime(pipeName);
 
         try
         {
@@ -827,10 +862,7 @@ internal static class Program
                 "'stdio' forwards to the persistent runtime and does not support --broker.");
 
         var pipeName = ParseOption(args, "--pipe");
-        var client = RuntimePipeClient
-            .ConnectAsync(pipeName)
-            .GetAwaiter()
-            .GetResult();
+        var client = ConnectRuntime(pipeName);
 
         try
         {
@@ -865,12 +897,33 @@ internal static class Program
             new(client.ExecuteAsync(request, cancellationToken: cancellationToken));
     }
 
+    private static RuntimePipeClient ConnectRuntime(string? pipeName)
+    {
+        var resolvedPipe = RuntimeEndpoint.ResolvePipeName(pipeName);
+
+        try
+        {
+            return RuntimePipeClient
+                .ConnectAsync(resolvedPipe)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception ex) when (
+            ex is TimeoutException or
+                IOException or
+                OperationCanceledException)
+        {
+            throw new RuntimeUnavailableException(resolvedPipe, ex);
+        }
+    }
+
     private static TargetRef ResolveRuntimeTarget(
         RuntimePipeClient client,
         string? requestedTargetId,
         string? requestedHost,
         JsonElement nullInput)
-    {        if (!string.IsNullOrWhiteSpace(requestedTargetId))
+    {
+        if (!string.IsNullOrWhiteSpace(requestedTargetId))
         {
             if (!string.IsNullOrWhiteSpace(requestedHost))
                 return new TargetRef(requestedHost, requestedTargetId);
@@ -1235,10 +1288,14 @@ internal static class Program
         {
             ok = true,
             product = "COM Tool V2",
-            phase = "mutation-safety-alpha",
+            version = ProductVersion,
+            informationalVersion = InformationalVersion,
+            protocolVersion = ProtocolVersion.Current,
+            phase = "production-foundation",
             commands = new[]
             {
                 "health [--runtime] [--pipe <name>]",
+                "incidents [--pipe <name>]",
                 "stdio [--pipe <name>]",
                 "targets [--broker --worker <path> | --runtime [--pipe <name>]]",
                 "capabilities [--target <id>] [--host <host>] [--lease <id>] [--broker --worker <path> | --runtime [--pipe <name>]]",
@@ -1261,20 +1318,38 @@ internal static class Program
         return 0;
     }
 
+    private static int WriteVersion()
+    {
+        Console.Out.WriteLine(JsonSerializer.Serialize(new
+        {
+            ok = true,
+            product = "COM Tool V2",
+            component = "ComTool.Cli",
+            version = ProductVersion,
+            informationalVersion = InformationalVersion,
+            protocolVersion = ProtocolVersion.Current
+        }, JsonOptions));
+        return 0;
+    }
+
     private static int WriteError(
         string kind,
         string message,
         IReadOnlyList<string> suggestedActions,
-        int? hresult = null)
+        int? hresult = null,
+        bool retryable = false,
+        ExecutionState execution = ExecutionState.NotStarted)
     {
         Console.Out.WriteLine(JsonSerializer.Serialize(new
         {
             ok = false,
+            protocolVersion = ProtocolVersion.Current,
             error = new
             {
                 kind,
                 message,
-                retryable = false,
+                retryable,
+                execution,
                 hResult = hresult,
                 hResultHex = hresult is null
                     ? null
@@ -1284,5 +1359,15 @@ internal static class Program
         }, JsonOptions));
 
         return 1;
+    }
+
+    private sealed class RuntimeUnavailableException(
+        string pipeName,
+        Exception innerException)
+        : Exception(
+            "The persistent COM Tool V2 runtime is unreachable.",
+            innerException)
+    {
+        public string PipeName { get; } = pipeName;
     }
 }

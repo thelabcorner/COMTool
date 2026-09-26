@@ -175,6 +175,14 @@ public sealed class RuntimePipeServer
                     {
                         return;
                     }
+                    catch (OperationCanceledException)
+                    {
+                        // A timed-out/disconnected client can surface as an
+                        // aborted pipe write even when the server itself was
+                        // not cancelled. That terminates only this connection;
+                        // it must not fault the long-lived server loop.
+                        return;
+                    }
                 }
             }
         }

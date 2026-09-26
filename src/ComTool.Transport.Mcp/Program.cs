@@ -12,8 +12,25 @@ using ModelContextProtocol.Server;
 
 internal static class Program
 {
+    private static readonly Assembly ExecutingAssembly =
+        typeof(Program).Assembly;
+    private static readonly string ProductVersion =
+        ExecutingAssembly.GetName().Version?.ToString() ?? "unknown";
+    private static readonly string InformationalVersion =
+        ExecutingAssembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion
+        ?? ProductVersion;
+
     private static async Task<int> Main(string[] args)
     {
+        if (args.Length > 0 &&
+            args[0] is "--help" or "-h" or "help")
+            return WriteHelp();
+        if (args.Length > 0 &&
+            args[0] is "--version" or "-v" or "version")
+            return WriteVersion();
+
         if (args.Contains("--server", StringComparer.Ordinal))
         {
             await RunServerAsync(args);
@@ -21,6 +38,38 @@ internal static class Program
         }
 
         return await RunSelfTestAsync(args);
+    }
+
+    private static int WriteHelp()
+    {
+        Console.Out.WriteLine(JsonSerializer.Serialize(new
+        {
+            ok = true,
+            component = "ComTool.Transport.Mcp",
+            version = ProductVersion,
+            informationalVersion = InformationalVersion,
+            protocolVersion = ProtocolVersion.Current,
+            usage = new[]
+            {
+                "ComTool.Transport.Mcp.exe --server [--pipe <name>]",
+                "ComTool.Transport.Mcp.exe --self-test [--pipe <name>]"
+            }
+        }));
+        return 0;
+    }
+
+    private static int WriteVersion()
+    {
+        Console.Out.WriteLine(JsonSerializer.Serialize(new
+        {
+            ok = true,
+            component = "ComTool.Transport.Mcp",
+            version = ProductVersion,
+            informationalVersion = InformationalVersion,
+            protocolVersion = ProtocolVersion.Current,
+            sdk = "ModelContextProtocol 2.2.0"
+        }));
+        return 0;
     }
 
     private static async Task RunServerAsync(string[] args)
@@ -336,16 +385,82 @@ internal sealed class RuntimeBridge(string? defaultPipeName = null)
 
             return ProtocolJson.Serialize(result);
         }
+        catch (RuntimeRequestInterruptedException ex)
+        {
+            return ProtocolJson.Serialize(
+                TransportFailure(
+                    request,
+                    "runtime_request_interrupted",
+                    ex.Message,
+                    retryable: false,
+                    execution: ex.Execution,
+                    ["inspect_runtime", "inspect_mutation_ledger"]));
+        }
+        catch (OperationCanceledException ex)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            return ProtocolJson.Serialize(
+                TransportFailure(
+                    request,
+                    "runtime_transport_cancelled",
+                    ex.Message,
+                    retryable: true,
+                    execution: ExecutionState.NotStarted,
+                    ["retry_after_runtime_recovery"]));
+        }
+        catch (OperationCanceledException ex)
+        {
+            var callerCancelled = cancellationToken.IsCancellationRequested;
+            return ProtocolJson.Serialize(
+                TransportFailure(
+                    request,
+                    callerCancelled
+                        ? "runtime_transport_cancelled"
+                        : "runtime_unreachable",
+                    ex.Message,
+                    retryable: true,
+                    execution: ExecutionState.NotStarted,
+                    callerCancelled
+                        ? ["retry_after_runtime_recovery"]
+                        : ["start_runtime", "inspect_runtime"]));
+        }
         catch (Exception ex)
         {
             return ProtocolJson.Serialize(
-                Invalid(
-                    request.Operation,
-                    request.Id,
+                TransportFailure(
+                    request,
                     "runtime_unreachable",
-                    ex.Message));
+                    ex.Message,
+                    retryable: true,
+                    execution: ExecutionState.NotStarted,
+                    ["start_runtime", "inspect_runtime"]));
         }
     }
+
+    private static OperationResult TransportFailure(
+        OperationRequest request,
+        string kind,
+        string message,
+        bool retryable,
+        ExecutionState execution,
+        IReadOnlyList<string> suggestedActions) =>
+        new()
+        {
+            ProtocolVersion = ProtocolVersion.Current,
+            Id = request.Id,
+            Operation = request.Operation,
+            Ok = false,
+            Status = OperationStatus.Failed,
+            TargetState = TargetState.Unavailable,
+            Error = new ProtocolError
+            {
+                Kind = kind,
+                Message = message,
+                Retryable = retryable,
+                Execution = execution,
+                SuggestedActions = suggestedActions
+            }
+        };
 
     private static OperationResult Invalid(
         string operation,
