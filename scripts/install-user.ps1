@@ -12,6 +12,34 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $VersionPattern = '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$'
 
+function Get-RelativePathCompat {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    ) + [IO.Path]::DirectorySeparatorChar
+    $pathFull = [IO.Path]::GetFullPath($Path)
+    $rootUri = New-Object System.Uri($rootFull)
+    $pathUri = New-Object System.Uri($pathFull)
+    return [Uri]::UnescapeDataString(
+        $rootUri.MakeRelativeUri($pathUri).ToString()
+    ).Replace("/", [IO.Path]::DirectorySeparatorChar)
+}
+
+function Write-Utf8NoBom {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Text
+    )
+
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($Path, $Text, $encoding)
+}
+
 function Get-Sha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -90,9 +118,7 @@ function Assert-ReleasePayload {
     [void]$controlFiles.Add("SHA256SUMS.txt")
 
     foreach ($file in Get-ChildItem -LiteralPath $Root -File -Recurse -Force) {
-        $relative = [IO.Path]::GetRelativePath(
-            $Root,
-            $file.FullName).Replace("\", "/")
+        $relative = (Get-RelativePathCompat -Root $Root -Path $file.FullName).Replace("\", "/")
         if (-not $expected.Contains($relative) -and
             -not $controlFiles.Contains($relative)) {
             throw "Release package contains unlisted file '$relative'."
@@ -186,8 +212,9 @@ $pointer = [ordered]@{
 }
 $pointerTemp = $currentPath + "." + [Guid]::NewGuid().ToString("N") + ".tmp"
 try {
-    $pointer | ConvertTo-Json -Depth 4 |
-        Set-Content -LiteralPath $pointerTemp -Encoding utf8NoBOM
+    Write-Utf8NoBom -Path $pointerTemp -Text (
+        $pointer | ConvertTo-Json -Depth 4
+    )
     Move-Item -LiteralPath $pointerTemp -Destination $currentPath -Force
 }
 finally {
