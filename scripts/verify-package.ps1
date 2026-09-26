@@ -50,7 +50,12 @@ try {
     New-Item -ItemType Directory -Force -Path $base, $localAppData | Out-Null
     $env:LOCALAPPDATA = $localAppData
 
+    $installArgs = @{
+        Source = $sourceRoot
+        InstallRoot = $installRoot
+    }
     if ([bool]$dirtyProperty.Value) {
+        $installArgs["AllowDirtyPackage"] = $true
         $installOutput = & $installScript -Source $sourceRoot -InstallRoot $installRoot -AllowDirtyPackage
     }
     else {
