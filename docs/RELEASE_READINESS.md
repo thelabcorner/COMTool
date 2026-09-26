@@ -115,6 +115,14 @@ SHA-256 inventory, and externally distributed archive SHA-256 for integrity.
 informational version along with the durable-state schema version, allowing a
 running installed runtime to be correlated with release provenance.
 
+Current validated production artifact: **0.1.1 / win-x64**, built from clean
+source commit `81ac72986652c95beb03d28773e71a9ddc7c2a2c`, unsigned by policy,
+with zero NuGet vulnerability records. Archive SHA-256:
+`cfde0b6c0905a24200a5de1d345ccbb122dfe25a93dbde22b6785e8d09cef8fc`.
+The packaged installer and uninstaller were exercised directly under Windows
+PowerShell `5.1.22621.6133`, and the installed RuntimeHost reported
+`0.1.1+81ac72986652c95beb03d28773e71a9ddc7c2a2c`.
+
 Live-host verification (Illustrator) is separate and must be run where a host is
 available; see the evidence files for the current live coverage.
 

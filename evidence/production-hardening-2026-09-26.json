@@ -38,21 +38,25 @@
       "source": "https://api.nuget.org/v3/index.json"
     }
   },
-  "latestFullDevelopmentRelease": {
-    "version": "0.1.5-dev",
+  "currentProductionRelease": {
+    "version": "0.1.1",
     "runtimeIdentifier": "win-x64",
-    "sourceCommit": "229abb816f991cbbf135e5b60aad7db55efe0fb2",
-    "sourceDirty": true,
+    "sourceCommit": "81ac72986652c95beb03d28773e71a9ddc7c2a2c",
+    "sourceDirty": false,
     "authenticode": false,
     "authenticodeRequiredForProduction": false,
-    "archiveSha256": "f73512fe4e279e6f4972108b1538968e6b50f9178b1c3abbd46195d884e0c724",
+    "archiveSha256": "cfde0b6c0905a24200a5de1d345ccbb122dfe25a93dbde22b6785e8d09cef8fc",
     "dependencyVulnerabilityRecords": 0,
     "transactionalFinalization": true,
     "immutableVersionDirectory": true,
     "installedArtifactSmoke": {
       "passed": true,
-      "runtimeVersion": "0.1.5.0",
-      "runtimeInformationalVersion": "0.1.5-dev+229abb816f991cbbf135e5b60aad7db55efe0fb2",
+      "shell": "Windows PowerShell 5.1.22621.6133",
+      "installerFromPackagedArtifact": true,
+      "uninstallerFromPackagedArtifact": true,
+      "developmentOverrideRequired": false,
+      "runtimeVersion": "0.1.1.0",
+      "runtimeInformationalVersion": "0.1.1+81ac72986652c95beb03d28773e71a9ddc7c2a2c",
       "stateSchemaVersion": 1,
       "knownTargetsWithoutHost": 0
     }
@@ -83,7 +87,6 @@
     "userDocumentModified": false
   },
   "remainingProductionInputs": [
-    "Track/commit the currently untracked COM Tool V2 subtree so the clean-source production release gate can pass.",
     "Run the owned-host LiveConformance controlled-mutation/reconciliation/restart sequence when no pre-existing Illustrator process is open."
   ]
 }
