@@ -1,0 +1,18 @@
+{
+  "gate": "0D",
+  "ok": true,
+  "responses": 11,
+  "checks": {
+    "responseCount": true,
+    "stringFidelity": true,
+    "numberFidelity": true,
+    "booleanFidelity": true,
+    "nullFidelity": true,
+    "objectFidelity": true,
+    "arrayFidelity": true,
+    "unknownOperation": true,
+    "versionRejected": true,
+    "malformedIsolated": true,
+    "strictUnknownField": true
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/error.schema.json",
+  "title": "ProtocolError",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "message", "retryable", "execution"],
+  "properties": {
+    "kind": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "message": { "type": "string" },
+    "retryable": { "type": "boolean" },
+    "execution": {
+      "type": "string",
+      "enum": ["not_started", "started", "completed", "ambiguous"]
+    },
+    "hResult": { "type": ["integer", "null"] },
+    "hResultHex": { "type": ["string", "null"], "pattern": "^0x[0-9A-Fa-f]{8}$" },
+    "suggestedActions": {
+      "type": ["array", "null"],
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 16
+    }
+  }
+}

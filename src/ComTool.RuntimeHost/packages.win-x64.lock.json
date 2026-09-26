@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "comtool.broker.protocol": {
+        "type": "Project",
+        "dependencies": {
+          "ComTool.Hosts.Abstractions": "[1.0.0, )",
+          "ComTool.Protocol": "[1.0.0, )"
+        }
+      },
+      "comtool.hosts.abstractions": {
+        "type": "Project",
+        "dependencies": {
+          "ComTool.Protocol": "[1.0.0, )"
+        }
+      },
+      "comtool.protocol": {
+        "type": "Project"
+      },
+      "comtool.runtime": {
+        "type": "Project",
+        "dependencies": {
+          "ComTool.Hosts.Abstractions": "[1.0.0, )",
+          "ComTool.Protocol": "[1.0.0, )"
+        }
+      },
+      "comtool.runtime.ipc": {
+        "type": "Project",
+        "dependencies": {
+          "ComTool.Protocol": "[1.0.0, )",
+          "ComTool.Transport.Pipe": "[1.0.0, )"
+        }
+      },
+      "comtool.supervisor": {
+        "type": "Project",
+        "dependencies": {
+          "ComTool.Broker.Protocol": "[1.0.0, )",
+          "ComTool.Hosts.Abstractions": "[1.0.0, )",
+          "ComTool.Protocol": "[1.0.0, )",
+          "ComTool.Runtime": "[1.0.0, )",
+          "ComTool.Transport.Pipe": "[1.0.0, )"
+        }
+      },
+      "comtool.transport.pipe": {
+        "type": "Project",
+        "dependencies": {
+          "ComTool.Protocol": "[1.0.0, )",
+          "ComTool.Runtime": "[1.0.0, )"
+        }
+      },
+      "comtool.transport.stdio": {
+        "type": "Project",
+        "dependencies": {
+          "ComTool.Protocol": "[1.0.0, )",
+          "ComTool.Runtime": "[1.0.0, )"
+        }
+      }
+    },
+    "net10.0-windows7.0/win-x64": {}
+  }
+}

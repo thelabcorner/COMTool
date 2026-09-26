@@ -1,0 +1,21 @@
+{
+  "gate": "0C",
+  "ok": true,
+  "elapsedMs": 947.729,
+  "maxFrameBytes": 1048576,
+  "targetId": "fake:illustrator-reference:gate0c",
+  "checks": {
+    "workerSTA": true,
+    "authenticatedHandshake": true,
+    "ping": true,
+    "concurrentCallers": 40,
+    "requestsPerCaller": 25,
+    "totalSerializedRequests": 1000,
+    "uniqueSequences": 1000,
+    "workerRestartPreservedTargetIdentity": true,
+    "workerRestartChangedWorkerIdentity": true,
+    "ambiguousMutationWatchdogFired": true,
+    "targetStateAfterWatchdog": "reconciliation_required",
+    "explicitReconcileRestoredState": "known"
+  }
+}

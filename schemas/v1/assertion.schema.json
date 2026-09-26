@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/assertion.schema.json",
+  "title": "OperationCondition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "source", "predicate"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "input"],
+      "properties": {
+        "operation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "input": {}
+      }
+    },
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "equals",
+            "not_equals",
+            "truthy",
+            "falsey",
+            "is_null",
+            "not_null"
+          ]
+        },
+        "expected": {
+          "$ref": "value.schema.json"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": ["equals", "not_equals"]
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["expected"]
+          },
+          "else": {
+            "not": {
+              "required": ["expected"]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

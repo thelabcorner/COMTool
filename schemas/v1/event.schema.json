@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/event.schema.json",
+  "title": "RuntimeEvent (reserved v1 shape)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "type", "timestamp", "data"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "type": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "operationId": { "type": ["string", "null"] },
+    "workflowId": { "type": ["string", "null"] },
+    "targetId": { "type": ["string", "null"] },
+    "workerId": { "type": ["string", "null"] },
+    "data": {}
+  }
+}

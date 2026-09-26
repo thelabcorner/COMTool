@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/target.schema.json",
+  "title": "TargetRef",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host"],
+  "properties": {
+    "host": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "id": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+    "generation": { "type": ["integer", "null"], "minimum": 0 }
+  }
+}

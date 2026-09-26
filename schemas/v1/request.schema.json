@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/request.schema.json",
+  "title": "OperationRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "id", "operation", "input"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "target": {
+      "oneOf": [
+        { "$ref": "target.schema.json" },
+        { "type": "null" }
+      ]
+    },
+    "operation": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "input": {},
+    "policy": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "queueTimeoutMs": { "type": ["integer", "null"], "minimum": 0 },
+        "retryBudgetMs": { "type": ["integer", "null"], "minimum": 0 },
+        "operationSoftTimeoutMs": { "type": ["integer", "null"], "minimum": 0 },
+        "workerWatchdogMs": { "type": ["integer", "null"], "minimum": 0 },
+        "allowReplayAfterAmbiguous": { "type": "boolean" },
+        "leaseId": {
+          "type": ["string", "null"],
+          "minLength": 32,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      }
+    },
+    "preconditions": {
+      "type": ["array", "null"],
+      "maxItems": 128,
+      "items": { "$ref": "assertion.schema.json" }
+    },
+    "postconditions": {
+      "type": ["array", "null"],
+      "maxItems": 128,
+      "items": { "$ref": "assertion.schema.json" }
+    }
+  }
+}

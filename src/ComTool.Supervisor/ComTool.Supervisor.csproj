@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ComTool.Protocol\ComTool.Protocol.csproj" />
+    <ProjectReference Include="..\ComTool.Hosts.Abstractions\ComTool.Hosts.Abstractions.csproj" />
+    <ProjectReference Include="..\ComTool.Runtime\ComTool.Runtime.csproj" />
+    <ProjectReference Include="..\ComTool.Broker.Protocol\ComTool.Broker.Protocol.csproj" />
+    <ProjectReference Include="..\ComTool.Transport.Pipe\ComTool.Transport.Pipe.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

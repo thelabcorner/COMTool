@@ -1,0 +1,30 @@
+{
+  "gate": "0B",
+  "ok": true,
+  "runtime": ".NET 10.0.12",
+  "rid": "win-x64",
+  "runsPerVariant": 20,
+  "baseline": {
+    "selfContained": true,
+    "singleFile": true,
+    "readyToRun": false,
+    "bytes": 73524927,
+    "MiB": 70.12,
+    "minMs": 61.93,
+    "medianMs": 63.53,
+    "p95Ms": 72.5,
+    "maxMs": 74.744
+  },
+  "readyToRun": {
+    "selfContained": true,
+    "singleFile": true,
+    "readyToRun": true,
+    "bytes": 83226047,
+    "MiB": 79.37,
+    "minMs": 64.399,
+    "medianMs": 65.588,
+    "p95Ms": 79.746,
+    "maxMs": 81.009
+  },
+  "decision": "Keep non-ReadyToRun as the Phase 0 baseline; ReadyToRun was both larger and slower in this minimal process-start benchmark."
+}

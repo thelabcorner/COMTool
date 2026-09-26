@@ -1,0 +1,106 @@
+{
+  "date": "2026-09-24",
+  "result": "pass",
+  "host": {
+    "family": "illustrator",
+    "version": "30.6.0",
+    "targetId": "illustrator:51e2210cf5947181448c968f"
+  },
+  "deterministicVerification": {
+    "solutionBuildWarnings": 0,
+    "solutionBuildErrors": 0,
+    "testsPassing": 126,
+    "testsFailing": 0,
+    "supervisorTestsPassing": 34
+  },
+  "eson": {
+    "canonicalCodec": "ESON runtime",
+    "embeddedSha256": "c368d65f3b9c23ac5972cdb3cebf492a04f52cf04bd5f4c23b5a388da2a83e93",
+    "buildDriftCheck": true,
+    "liveTypeMatrix": {
+      "number": 42,
+      "boolean": true,
+      "null": null,
+      "string": "true",
+      "array": [1, null, "x", true],
+      "object": {
+        "s": "true",
+        "n": 2,
+        "b": true,
+        "a": [1, null, "x"]
+      },
+      "structuredArgsResult": 42
+    },
+    "warmHostExecutionMs": {
+      "boolean": 1.1114,
+      "null": 1.0726,
+      "string": 0.8971,
+      "array": 1.0549,
+      "structuredArgs": 1.1006
+    },
+    "espackEnabledForScriptEval": false,
+    "reason": "Current eval workload is stringify-dominant with small parse inputs; slim ESON runtime is the measured simpler path."
+  },
+  "durableMutationReplay": {
+    "requestId": "live-eson-object-d-001",
+    "writeAheadLedger": true,
+    "runtimeAndWorkerHardKilled": true,
+    "sameStateDirectoryAfterRestart": true,
+    "storedResultReturned": true,
+    "targetWorkerLaunchedForReplay": false,
+    "liveWorkersAfterReplay": 0,
+    "replayEvidenceKind": "mutation.replay",
+    "replayExecuteMs": 0,
+    "replayEndToEndMs": 28.8327,
+    "sameRequestDifferentIntentRejectedByTests": true,
+    "preparedOrAmbiguousBlindReplay": false
+  },
+  "incidentResolution": {
+    "requestId": "eson-live-error-001",
+    "initialIncidentKind": "script_error",
+    "initialRevision": 1,
+    "genericReconcileRefusedToClear": true,
+    "resolution": "known_unchanged",
+    "resolutionRationale": "Conformance script intentionally threw before performing any document mutation.",
+    "resolvedRevision": 2,
+    "resolutionTotalMs": 12.8106,
+    "activeLedgerMarkerCleared": true,
+    "terminalLedgerRecordPreserved": true,
+    "runtimeRestartedAfterResolution": true,
+    "rehydratedState": "known",
+    "exactOriginalRequestRetry": {
+      "ok": false,
+      "status": "invalid_request",
+      "errorKind": "mutation_request_already_resolved",
+      "execution": "not_started",
+      "liveWorkersAfterRetry": 0,
+      "totalMs": 19.1537
+    }
+  },
+  "crossRuntimeLease": {
+    "twoIndependentRuntimeProcesses": true,
+    "sameStrongTargetId": true,
+    "secondAcquireWhileFirstAlive": {
+      "ok": false,
+      "status": "host_busy",
+      "errorKind": "target_leased_external",
+      "execution": "not_started",
+      "retryable": true
+    },
+    "firstRuntimeHardKilled": true,
+    "secondAcquireAfterOwnerDeath": {
+      "ok": true,
+      "delayBeforeRetryMs": 300,
+      "waitedForOriginalTtl": false
+    },
+    "idleTtlReleaseCoveredByDeterministicTest": true
+  },
+  "safety": {
+    "arbitraryScriptMayDeclareReadOnly": false,
+    "omittedScriptEffects": "unknown",
+    "genericHeartbeatResolvesMutationAmbiguity": false,
+    "mutationAmbiguitySurvivesWorkerRestart": true,
+    "mutationAmbiguitySurvivesRuntimeRestart": true,
+    "legacyComToolModified": false
+  }
+}

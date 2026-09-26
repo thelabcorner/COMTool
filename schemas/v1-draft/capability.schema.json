@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:comtool-v2:schema:v1-draft:capability",
+  "title": "CapabilityReport",
+  "type": "object",
+  "required": ["targetId", "host", "adapter", "adapterVersion", "facets"],
+  "properties": {
+    "targetId": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "host": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
+    "adapter": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "adapterVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "facets": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["version", "operations"],
+        "properties": {
+          "version": { "type": "integer", "minimum": 1 },
+          "operations": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z][a-z0-9_-]*)+$"
+            }
+          },
+          "metadata": { "type": "object" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:comtool-v2:schema:v1-draft:operation-request",
+  "title": "OperationRequest",
+  "type": "object",
+  "required": ["protocolVersion", "id", "operation", "input"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "target": { "$ref": "urn:comtool-v2:schema:v1-draft:target#/$defs/ref" },
+    "operation": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z][a-z0-9_-]*)+$",
+      "maxLength": 256
+    },
+    "input": {},
+    "policy": {
+      "type": "object",
+      "properties": {
+        "queueTimeoutMs": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+        "retryBudgetMs": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+        "operationSoftTimeoutMs": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+        "workerWatchdogMs": { "type": "integer", "minimum": 100, "maximum": 3600000 },
+        "onAmbiguous": { "enum": ["stop", "reconcile"] }
+      },
+      "additionalProperties": false
+    },
+    "preconditions": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "urn:comtool-v2:schema:v1-draft:assertion" }
+    },
+    "postconditions": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "urn:comtool-v2:schema:v1-draft:assertion" }
+    }
+  },
+  "additionalProperties": false
+}

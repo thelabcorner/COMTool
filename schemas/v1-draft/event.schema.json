@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:comtool-v2:schema:v1-draft:event",
+  "title": "RuntimeEvent",
+  "type": "object",
+  "required": ["protocolVersion", "sequence", "timestamp", "kind", "payload"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z][a-z0-9_-]*)+$",
+      "maxLength": 256
+    },
+    "target": { "$ref": "urn:comtool-v2:schema:v1-draft:target#/$defs/ref" },
+    "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "workflowId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "workerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "payload": {}
+  },
+  "additionalProperties": false
+}

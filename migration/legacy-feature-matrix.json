@@ -1,0 +1,630 @@
+{
+  "schemaVersion": 1,
+  "status": "draft",
+  "source": "legacy COM Tool + 2026-09-23 audit + remembered live-engine findings",
+  "policy": {
+    "classifications": [
+      "preserve",
+      "redesign",
+      "deprecate",
+      "drop"
+    ],
+    "rule": "Compatibility never overrides safety or truthful semantics."
+  },
+  "features": [
+    {
+      "legacySurface": "status",
+      "classification": "preserve",
+      "legacyBehavior": "Read host version/build, document count, UI/action state, active document summary.",
+      "defectsToAvoid": [
+        "Nested property reads sometimes bypass retry.",
+        "Host health and script-engine health are conflated."
+      ],
+      "v2Operation": "core.target.status",
+      "facet": "ITargetStatus",
+      "mutationClass": "read_only",
+      "idempotency": "idempotent",
+      "recovery": "safe_retry",
+      "phase": "Illustrator Wave A",
+      "oracle": [
+        "legacy status",
+        "live Illustrator status probe",
+        "Photoshop 0F generic host state"
+      ]
+    },
+    {
+      "legacySurface": "snapshot",
+      "classification": "redesign",
+      "legacyBehavior": "Capture active document and selection state through injected JSX.",
+      "defectsToAvoid": [
+        "Standalone snapshot can wrap inner parse failure as outer success.",
+        "Snapshot shape is Illustrator-specific."
+      ],
+      "v2Operation": "host.snapshot",
+      "facet": "ISnapshotProvider",
+      "mutationClass": "read_only",
+      "idempotency": "idempotent",
+      "recovery": "safe_retry",
+      "phase": "Illustrator Wave A",
+      "oracle": [
+        "legacy snapshot fixtures",
+        "live disposable document"
+      ]
+    },
+    {
+      "legacySurface": "get <path>",
+      "classification": "preserve",
+      "legacyBehavior": "Resolve dotted COM path with zero-based collection indices and read a property.",
+      "defectsToAvoid": [
+        "Empty path segments collapse silently.",
+        "Object summaries perform un-retried nested reads.",
+        "COM DOM must not be confused with JSX DOM."
+      ],
+      "v2Operation": "com.get",
+      "facet": "IComAutomation",
+      "mutationClass": "read_only",
+      "idempotency": "idempotent",
+      "recovery": "safe_retry_if_target_generation_matches",
+      "phase": "Illustrator Wave A",
+      "oracle": [
+        "legacy ComBridge tests",
+        "Illustrator COM inventory",
+        "Photoshop COM probe"
+      ]
+    },
+    {
+      "legacySurface": "set <path> <value>",
+      "classification": "redesign",
+      "legacyBehavior": "Set one direct COM property.",
+      "defectsToAvoid": [
+        "No first-class pre/postconditions.",
+        "No universal type-domain validation from inventory.",
+        "Ambiguous failure cannot be treated as non-execution."
+      ],
+      "v2Operation": "com.set",
+      "facet": "IComAutomation",
+      "mutationClass": "conditional_write",
+      "idempotency": "operation_metadata",
+      "recovery": "reconcile_on_ambiguous_failure",
+      "phase": "Illustrator Wave B",
+      "oracle": [
+        "legacy direct COM behavior",
+        "typed inventory",
+        "disposable document"
+      ]
+    },
+    {
+      "legacySurface": "call <path> [args]",
+      "classification": "redesign",
+      "legacyBehavior": "Invoke arbitrary COM method with JSON arguments.",
+      "defectsToAvoid": [
+        "Method domains can be mis-modeled, e.g. Document.Close Boolean vs AiSaveOptions.",
+        "Mutation risk is unknown from the raw call name."
+      ],
+      "v2Operation": "com.call",
+      "facet": "IComAutomation",
+      "mutationClass": "declared_by_operation_or_unknown",
+      "idempotency": "declared_by_operation_or_unknown",
+      "recovery": "unknown_calls_default_to_reconcile_on_ambiguity",
+      "phase": "Illustrator Wave A/B",
+      "oracle": [
+        "legacy bridge tests",
+        "COM knowledge pack signatures"
+      ]
+    },
+    {
+      "legacySurface": "eval --expr/--code",
+      "classification": "redesign",
+      "legacyBehavior": "Run ExtendScript through Illustrator DoJavaScript with wrappers, args, JSON helpers, error remapping.",
+      "defectsToAvoid": [
+        "JSON-looking strings can lose type identity.",
+        "Static ES3 preflight is not authoritative.",
+        "RPC_E_SERVERFAULT can occur while ordinary COM reads remain healthy."
+      ],
+      "v2Operation": "script.eval",
+      "facet": "IScriptRuntime",
+      "mutationClass": "caller_declared_or_unknown",
+      "idempotency": "stable_request_id_deduplicated",
+      "recovery": "write_ahead_ledger_completed_replay_ambiguous_stop",
+      "phase": "Illustrator Wave A — implemented/live",
+      "oracle": [
+        "legacy eval tests",
+        "Gate 0A",
+        "type-fidelity fixtures",
+        "live ESON scalar/array/object/args matrix",
+        "runtime-crash durable replay proof"
+      ]
+    },
+    {
+      "legacySurface": "eval --file",
+      "classification": "redesign",
+      "legacyBehavior": "Auto-route directive-bearing JSX through $.evalFile; inject directive-free files.",
+      "defectsToAvoid": [
+        "Injected and evalFile routes have materially different semantics.",
+        "Arguments and return behavior differ by route."
+      ],
+      "v2Operation": "script.runFile",
+      "facet": "IScriptRuntime",
+      "mutationClass": "caller_declared_or_unknown",
+      "idempotency": "unknown_by_default",
+      "recovery": "route_specific",
+      "phase": "Illustrator Wave C — implemented/deterministic",
+      "oracle": [
+        "legacy directive routing tests",
+        "live #target/#include fixtures"
+      ]
+    },
+    {
+      "legacySurface": "ES3 preflight",
+      "classification": "preserve",
+      "legacyBehavior": "Fast static rejection of unsupported syntax before a host call.",
+      "defectsToAvoid": [
+        "Regex-literal blind spots.",
+        "Reserved-word and host-parser edge cases.",
+        "Must not claim live-engine equivalence."
+      ],
+      "v2Operation": "script.validate",
+      "facet": "IScriptStaticAnalyzer",
+      "mutationClass": "read_only",
+      "idempotency": "idempotent",
+      "recovery": "n/a",
+      "phase": "Agent discovery / tooling",
+      "oracle": [
+        "legacy ES3 tests",
+        "ESTC/live-engine fixtures"
+      ]
+    },
+    {
+      "legacySurface": "action <name>",
+      "classification": "redesign",
+      "legacyBehavior": "Run Illustrator actions and poll ActionIsRunning.",
+      "defectsToAvoid": [
+        "UserInteractionLevel restoration can be lost.",
+        "Timeout phases can double-window.",
+        "Action success still requires postcondition."
+      ],
+      "v2Operation": "illustrator.action.run",
+      "facet": "IActionRuntime",
+      "mutationClass": "non_idempotent_write",
+      "idempotency": "unknown_by_default",
+      "recovery": "reconcile_on_ambiguous_failure",
+      "phase": "Illustrator Wave C",
+      "oracle": [
+        "legacy action runner",
+        "disposable action fixtures"
+      ]
+    },
+    {
+      "legacySurface": "open <file>",
+      "classification": "redesign",
+      "legacyBehavior": "Open an Illustrator document.",
+      "defectsToAvoid": [
+        "Active-document state becomes an implicit dependency for later commands.",
+        "Lifecycle ownership is not explicit."
+      ],
+      "v2Operation": "document.open",
+      "facet": "IDocumentLifecycle",
+      "mutationClass": "document_lifecycle",
+      "idempotency": "conditional",
+      "recovery": "target_snapshot_and_document_identity",
+      "phase": "Illustrator Wave B",
+      "oracle": [
+        "legacy open",
+        "temporary fixture documents"
+      ]
+    },
+    {
+      "legacySurface": "close --save Boolean",
+      "classification": "drop",
+      "legacyBehavior": "Close document with Boolean save argument.",
+      "defectsToAvoid": [
+        "Wrong argument domain; Illustrator expects AiSaveOptions.",
+        "Implicit discard/save policies are unsafe."
+      ],
+      "v2Operation": "document.close",
+      "facet": "IDocumentLifecycle",
+      "mutationClass": "document_lifecycle",
+      "idempotency": "conditional",
+      "recovery": "explicit_policy_and_reconcile",
+      "phase": "Illustrator Wave B",
+      "oracle": [
+        "AiSaveOptions inventory",
+        "Gate 0A explicit aiDoNotSaveChanges=2"
+      ],
+      "replacementSemantics": [
+        "save",
+        "discard",
+        "prompt",
+        "reject_if_dirty"
+      ]
+    },
+    {
+      "legacySurface": "batch",
+      "classification": "deprecate",
+      "legacyBehavior": "Execute multiple operations in one COM session; continue after individual failures.",
+      "defectsToAvoid": [
+        "Dependent stateful mutations continue after prerequisites fail.",
+        "No guards or target lease."
+      ],
+      "v2Operation": "workflow.run",
+      "facet": "IWorkflowRuntime",
+      "mutationClass": "derived_from_steps",
+      "idempotency": "derived_from_steps",
+      "recovery": "fail_fast_by_default",
+      "phase": "Workflow/job engine",
+      "oracle": [
+        "legacy batch tests",
+        "fake-host workflow tests"
+      ]
+    },
+    {
+      "legacySurface": "queue",
+      "classification": "drop",
+      "legacyBehavior": "Persist steps across calls and resume; skip persisted done entries.",
+      "defectsToAvoid": [
+        "At-least-once mutation replay after crash.",
+        "Multi-writer races.",
+        "Resume-safe wording overstates guarantees."
+      ],
+      "v2Operation": "job.submit / workflow.run",
+      "facet": "IJobRuntime",
+      "mutationClass": "derived_from_steps",
+      "idempotency": "explicit_per_step",
+      "recovery": "generation_CAS_and_no_blind_mutation_replay",
+      "phase": "Workflow/job engine",
+      "oracle": [
+        "legacy crash-window audit",
+        "fake-host crash injection"
+      ]
+    },
+    {
+      "legacySurface": "--stay stdin chain",
+      "classification": "drop",
+      "legacyBehavior": "Keep one process/COM session alive while commands stream over stdin.",
+      "defectsToAvoid": [
+        "Help wording implied persistence across later processes.",
+        "Duplicates concerns solved by real broker/runtime."
+      ],
+      "v2Operation": "rpc stdio / brokered session",
+      "facet": "ITransport",
+      "mutationClass": "n/a",
+      "idempotency": "n/a",
+      "recovery": "transport_specific",
+      "phase": "Transport layer",
+      "oracle": [
+        "Gate 0C",
+        "Gate 0D"
+      ]
+    },
+    {
+      "legacySurface": "watch",
+      "classification": "redesign",
+      "legacyBehavior": "Poll COM path or JSX expression until expected/changed.",
+      "defectsToAvoid": [
+        "Boolean vs numeric equality conflation.",
+        "A blocked provider defeats watch timeout.",
+        "Very low interval can hammer Illustrator."
+      ],
+      "v2Operation": "watch.condition / subscription.create",
+      "facet": "IWatchRuntime",
+      "mutationClass": "read_only",
+      "idempotency": "idempotent",
+      "recovery": "bounded_poll_with_target_generation",
+      "phase": "Illustrator advanced",
+      "oracle": [
+        "legacy watch tests",
+        "fake-host delayed/blocking provider"
+      ]
+    },
+    {
+      "legacySurface": "named session",
+      "classification": "drop",
+      "legacyBehavior": "File-backed agent-owned arbitrary state plus op counter.",
+      "defectsToAvoid": [
+        "Filename sanitization aliases names.",
+        "Multi-writer lost updates.",
+        "Not host session state."
+      ],
+      "v2Operation": "session handle only for real runtime/debug/workflow continuity",
+      "facet": "ISessionRuntime",
+      "mutationClass": "runtime_state",
+      "idempotency": "revisioned",
+      "recovery": "CAS",
+      "phase": "Runtime kernel",
+      "oracle": [
+        "state-machine tests"
+      ]
+    },
+    {
+      "legacySurface": "task run/status/wait/cancel",
+      "classification": "drop",
+      "legacyBehavior": "Spawn child process, persist task record, poll/cancel by PID.",
+      "defectsToAvoid": [
+        "PID reuse cancellation hazard.",
+        "Cancel/finalize lost-update race.",
+        "running state not persisted.",
+        "task wait can return outer success for child failure."
+      ],
+      "v2Operation": "job.submit/status/cancel",
+      "facet": "IJobRuntime",
+      "mutationClass": "derived_from_job",
+      "idempotency": "explicit",
+      "recovery": "owned_process_handle_or_job_object_plus_CAS",
+      "phase": "Workflow/job engine",
+      "oracle": [
+        "fake-host jobs",
+        "process identity tests"
+      ]
+    },
+    {
+      "legacySurface": "debug attach/breakpoints",
+      "classification": "preserve",
+      "legacyBehavior": "Use Adobe ExtendScript Debugger transport; breakpoints persist in host.",
+      "defectsToAvoid": [
+        "Version selection was lexicographic.",
+        "Default app spec version-tied.",
+        "One-off process model limits persistent debug conversation."
+      ],
+      "v2Operation": "debug.session.open / debug.breakpoints.*",
+      "facet": "IDebugRuntime",
+      "mutationClass": "debug_state",
+      "idempotency": "varies",
+      "recovery": "invalidate_on_host_restart",
+      "phase": "Illustrator Wave D",
+      "oracle": [
+        "legacy ESD integration tests",
+        "live debugger fixtures"
+      ]
+    },
+    {
+      "legacySurface": "debug eval/continue/step/frame/properties",
+      "classification": "redesign",
+      "legacyBehavior": "REPL-style debugger eval with suspension, stack/locals, continue/step control.",
+      "defectsToAvoid": [
+        "Stateless CLI invocation conflicts with real debugger session continuity.",
+        "Bridge startup timeout can block."
+      ],
+      "v2Operation": "debug.session.command",
+      "facet": "IDebugRuntime",
+      "mutationClass": "debug_or_script_state",
+      "idempotency": "varies",
+      "recovery": "session_owned_and_watchdog_bounded",
+      "phase": "Illustrator Wave D",
+      "oracle": [
+        "legacy debugger fixtures",
+        "live suspended script"
+      ]
+    },
+    {
+      "legacySurface": "COM named mutex",
+      "classification": "redesign",
+      "legacyBehavior": "Serialize one Illustrator automation invocation at a time.",
+      "defectsToAvoid": [
+        "Abandoned mutex proves only deadlock recovery, not document consistency.",
+        "Metadata file is not ProgID-scoped and has release/delete races."
+      ],
+      "v2Operation": "per-target scheduler / process-global target lease",
+      "facet": "IScheduler",
+      "mutationClass": "n/a",
+      "idempotency": "n/a",
+      "recovery": "kernel_lock_released_on_process_death; mutation_ambiguity_remains_durable",
+      "phase": "Supervisor kernel — implemented/live",
+      "oracle": [
+        "Gate 0C",
+        "fake-host crash tests",
+        "two-runtime live lease contention",
+        "hard-kill lease takeover proof"
+      ]
+    },
+    {
+      "legacySurface": "HRESULT retry",
+      "classification": "preserve",
+      "legacyBehavior": "Retry only known COM busy/rejected/transient failures with bounded backoff.",
+      "defectsToAvoid": [
+        "Deadline can be overshot by sleep.",
+        "Generic server faults need execution-certainty classification."
+      ],
+      "v2Operation": "runtime retry policy",
+      "facet": "IRetryPolicy",
+      "mutationClass": "n/a",
+      "idempotency": "policy_aware",
+      "recovery": "retry_budget_separate_from_watchdog",
+      "phase": "Worker kernel",
+      "oracle": [
+        "legacy hresult tests",
+        "injected fake HRESULTs",
+        "Gate 0A RPC_E_SERVERFAULT case"
+      ]
+    },
+    {
+      "legacySurface": "automatic attach/launch",
+      "classification": "redesign",
+      "legacyBehavior": "GetActiveObject then launch via Dispatch/EnsureDispatch.",
+      "defectsToAvoid": [
+        "Ownership of launched vs preexisting host is implicit.",
+        "Target identity/generation is weak."
+      ],
+      "v2Operation": "target.attach / target.launch / targets.discover",
+      "facet": "ITargetLifecycle",
+      "mutationClass": "host_lifecycle",
+      "idempotency": "conditional",
+      "recovery": "strong_identity_and_ownership",
+      "phase": "Runtime + adapters",
+      "oracle": [
+        "Gate 0A",
+        "Gate 0F Photoshop ownership probe"
+      ]
+    },
+    {
+      "legacySurface": "JSON envelope + exit codes",
+      "classification": "preserve",
+      "legacyBehavior": "One machine-readable envelope with ok/op/result/error/hresult/suggestion and 0/1/2 exit classes.",
+      "defectsToAvoid": [
+        "Some nested failures become outer success.",
+        "Retryability and execution certainty are not orthogonal fields."
+      ],
+      "v2Operation": "OperationResult",
+      "facet": "protocol",
+      "mutationClass": "n/a",
+      "idempotency": "n/a",
+      "recovery": "explicit status/retryable/execution/targetState",
+      "phase": "Protocol foundation",
+      "oracle": [
+        "Gate 0D",
+        "schema golden fixtures"
+      ]
+    },
+    {
+      "legacySurface": "large-result temp offload",
+      "classification": "redesign",
+      "legacyBehavior": "Write oversized results to temp files with cleanup.",
+      "defectsToAvoid": [
+        "Byte count can actually be character count.",
+        "Temp-path contract is not a general artifact model."
+      ],
+      "v2Operation": "artifact reference",
+      "facet": "IArtifactStore",
+      "mutationClass": "external_side_effect",
+      "idempotency": "content_addressable_where_possible",
+      "recovery": "versioned_expiring_artifact",
+      "phase": "Protocol/runtime",
+      "oracle": [
+        "size boundary tests"
+      ]
+    },
+    {
+      "legacySurface": "ESON/ESPACK shared acceleration",
+      "classification": "redesign",
+      "legacyBehavior": "Bootstrap shared JSON facade/native acceleration into ExtendScript global engine state.",
+      "defectsToAvoid": [
+        "Optimization mutates unrelated shared JSON/ESPAK state.",
+        "Consumer ESPAK state can be clobbered.",
+        "Correctness semantics must not depend on acceleration lane."
+      ],
+      "v2Operation": "script.eval ESON codec / optional measured accelerator",
+      "facet": "adapter_internal_script_codec",
+      "mutationClass": "host_runtime_state",
+      "idempotency": "hash_pinned_namespaced_bootstrap",
+      "recovery": "reinstall_hash_pinned_ESON_runtime; acceleration_optional",
+      "phase": "Wave A runtime codec implemented/live; ESPACK optional",
+      "oracle": [
+        "legacy ESON parity",
+        "canonical ESON build hash",
+        "live scalar/array/object/args codec matrix"
+      ]
+    },
+    {
+      "legacySurface": "--examples / command reference",
+      "classification": "redesign",
+      "legacyBehavior": "Extract copy-paste examples from Markdown command reference.",
+      "defectsToAvoid": [
+        "Docs can drift from parser/implementation.",
+        "Human examples are larger than necessary for agents."
+      ],
+      "v2Operation": "inspect operation / examples",
+      "facet": "ISelfDescription",
+      "mutationClass": "read_only",
+      "idempotency": "idempotent",
+      "recovery": "n/a",
+      "phase": "Agent discovery UX",
+      "oracle": [
+        "operation registry generated docs"
+      ]
+    },
+    {
+      "legacySurface": "COM lookup SQLite/JSON index",
+      "classification": "preserve",
+      "legacyBehavior": "Search type library inventory, signatures, enums, interface paths.",
+      "defectsToAvoid": [
+        "Illustrator-only naming/layout.",
+        "Source/version provenance must be stronger.",
+        "Cross-DOM names can look deceptively similar."
+      ],
+      "v2Operation": "knowledge.search / knowledge.symbol / knowledge.enum",
+      "facet": "IKnowledgePack",
+      "mutationClass": "read_only",
+      "idempotency": "idempotent",
+      "recovery": "n/a",
+      "phase": "Knowledge architecture",
+      "oracle": [
+        "current Illustrator COM index",
+        "Photoshop type library/registration",
+        "versioned manifests"
+      ]
+    },
+    {
+      "legacySurface": "SendScriptMessage / plugin calls",
+      "classification": "redesign",
+      "legacyBehavior": "Reach native .aip plugins only when they expose a compatible SendScriptMessage contract.",
+      "defectsToAvoid": [
+        "Not arbitrary native debugger access.",
+        "Plugin calls from background IPC threads must not invoke Illustrator suites directly."
+      ],
+      "v2Operation": "plugin.call",
+      "facet": "IPluginMessaging",
+      "mutationClass": "declared_by_plugin_method",
+      "idempotency": "declared_by_plugin_method",
+      "recovery": "plugin_contract_and_target_reconcile",
+      "phase": "Illustrator Wave E",
+      "oracle": [
+        "reusable plugin RPC fixture",
+        "VectorIPC integration tests"
+      ]
+    },
+    {
+      "legacySurface": "menu/action fallback routing",
+      "classification": "preserve",
+      "legacyBehavior": "Choose among direct COM, injected JSX, actions/menu commands, and native plugin routes.",
+      "defectsToAvoid": [
+        "Undocumented strings are version brittle.",
+        "Routing heuristics should not be hidden."
+      ],
+      "v2Operation": "adapter route planner / capability selection",
+      "facet": "IExecutionRoutePlanner",
+      "mutationClass": "derived",
+      "idempotency": "derived",
+      "recovery": "route_specific",
+      "phase": "Illustrator adapter",
+      "oracle": [
+        "knowledge-pack capability fixtures",
+        "live route probes"
+      ]
+    },
+    {
+      "legacySurface": "cross-agent persisted JSON records",
+      "classification": "drop",
+      "legacyBehavior": "Atomic replace JSON files for queue/task/session metadata.",
+      "defectsToAvoid": [
+        "Atomic replace is not multi-writer serialization.",
+        "Corrupt state can be treated as missing and overwritten."
+      ],
+      "v2Operation": "revisioned durable store",
+      "facet": "IRuntimeStore",
+      "mutationClass": "runtime_state",
+      "idempotency": "CAS",
+      "recovery": "corrupt_is_quarantined_not_reset",
+      "phase": "Runtime persistence",
+      "oracle": [
+        "multi-writer tests",
+        "corruption fixtures"
+      ]
+    },
+    {
+      "legacySurface": "validation script",
+      "classification": "redesign",
+      "legacyBehavior": "Validate skill/reference assets.",
+      "defectsToAvoid": [
+        "Legacy validator did not actually validate highest-risk comtool implementation."
+      ],
+      "v2Operation": "conformance test suite",
+      "facet": "testing",
+      "mutationClass": "n/a",
+      "idempotency": "n/a",
+      "recovery": "n/a",
+      "phase": "All phases",
+      "oracle": [
+        "unit/fake-host/live-host/adapter conformance tiers"
+      ]
+    }
+  ]
+}

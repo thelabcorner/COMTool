@@ -1,0 +1,636 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "name": "request/basic",
+      "schema": "operation-request.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-1",
+        "operation": "core.capabilities",
+        "input": {}
+      }
+    },
+    {
+      "name": "request/guarded",
+      "schema": "operation-request.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-2",
+        "target": {
+          "id": "illustrator:30.6:pid-6740",
+          "expectedGeneration": 4
+        },
+        "operation": "com.set",
+        "input": {
+          "path": "ActiveDocument.Saved",
+          "value": false
+        },
+        "policy": {
+          "retryBudgetMs": 2500,
+          "operationSoftTimeoutMs": 5000,
+          "workerWatchdogMs": 8000,
+          "onAmbiguous": "reconcile"
+        },
+        "preconditions": [
+          {
+            "id": "doc-match",
+            "source": {
+              "operation": "com.get",
+              "input": {
+                "path": "ActiveDocument.Name"
+              }
+            },
+            "predicate": {
+              "kind": "equals",
+              "expected": {
+                "kind": "string",
+                "value": "fixture.ai"
+              }
+            }
+          }
+        ],
+        "postconditions": [
+          {
+            "id": "saved-false",
+            "source": {
+              "operation": "com.get",
+              "input": {
+                "path": "ActiveDocument.Saved"
+              }
+            },
+            "predicate": {
+              "kind": "equals",
+              "expected": {
+                "kind": "boolean",
+                "value": false
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "request/unknown-field",
+      "schema": "operation-request.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "bad-1",
+        "operation": "core.status",
+        "input": {},
+        "bogus": true
+      }
+    },
+    {
+      "name": "request/watchdog-too-low",
+      "schema": "operation-request.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "bad-2",
+        "operation": "script.eval",
+        "input": {
+          "code": "1+1"
+        },
+        "policy": {
+          "workerWatchdogMs": 99
+        }
+      }
+    },
+    {
+      "name": "request/target-generation",
+      "schema": "operation-request.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "bad-3",
+        "target": {
+          "id": "x",
+          "expectedGeneration": -1
+        },
+        "operation": "com.get",
+        "input": {
+          "path": "Version"
+        }
+      }
+    },
+    {
+      "name": "result/success",
+      "schema": "operation-result.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-1",
+        "ok": true,
+        "status": "completed",
+        "operation": "com.get",
+        "retryable": false,
+        "execution": "completed",
+        "targetState": "known",
+        "result": {
+          "kind": "string",
+          "value": "30.6.0"
+        },
+        "timing": {
+          "queueMs": 0.2,
+          "executeMs": 1.1,
+          "totalMs": 1.3
+        }
+      }
+    },
+    {
+      "name": "result/success-mutated",
+      "schema": "operation-result.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-2",
+        "ok": true,
+        "status": "completed",
+        "operation": "com.set",
+        "retryable": false,
+        "execution": "completed",
+        "targetState": "known_changed",
+        "result": {
+          "kind": "null"
+        },
+        "evidence": {
+          "postconditions": [
+            {
+              "id": "saved-false",
+              "ok": true
+            }
+          ]
+        },
+        "timing": {
+          "executeMs": 2.1,
+          "verifyMs": 1,
+          "totalMs": 3.1
+        }
+      }
+    },
+    {
+      "name": "result/error",
+      "schema": "operation-result.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-3",
+        "ok": false,
+        "status": "ambiguous",
+        "operation": "script.eval",
+        "retryable": false,
+        "execution": "unknown",
+        "targetState": "reconciliation_required",
+        "error": {
+          "kind": "host_call_ambiguous",
+          "message": "Worker watchdog fired while a mutating host call was in flight.",
+          "code": -2147417851,
+          "nativeHex": "0x80010105",
+          "route": "illustrator.com.DoJavaScript",
+          "suggestedAction": "reconcile_target"
+        },
+        "timing": {
+          "executeMs": 5000,
+          "totalMs": 5000
+        }
+      }
+    },
+    {
+      "name": "result/invalid-request",
+      "schema": "operation-result.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": null,
+        "ok": false,
+        "status": "invalid_request",
+        "retryable": false,
+        "execution": "not_started",
+        "targetState": "unknown",
+        "error": {
+          "kind": "malformed_json",
+          "message": "Malformed JSON."
+        },
+        "timing": {
+          "totalMs": 0.1
+        }
+      }
+    },
+    {
+      "name": "result/success-with-error",
+      "schema": "operation-result.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "x",
+        "ok": true,
+        "status": "completed",
+        "operation": "com.get",
+        "retryable": false,
+        "execution": "completed",
+        "targetState": "known",
+        "result": {
+          "kind": "number",
+          "value": 1
+        },
+        "error": {
+          "kind": "should_not_exist",
+          "message": "bad"
+        },
+        "timing": {
+          "totalMs": 1
+        }
+      }
+    },
+    {
+      "name": "result/success-unknown-execution",
+      "schema": "operation-result.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "x",
+        "ok": true,
+        "status": "completed",
+        "operation": "com.get",
+        "retryable": false,
+        "execution": "unknown",
+        "targetState": "known",
+        "result": {
+          "kind": "number",
+          "value": 1
+        },
+        "timing": {
+          "totalMs": 1
+        }
+      }
+    },
+    {
+      "name": "result/failure-with-result",
+      "schema": "operation-result.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "x",
+        "ok": false,
+        "status": "operation_failed",
+        "operation": "com.get",
+        "retryable": false,
+        "execution": "completed",
+        "targetState": "known",
+        "result": {
+          "kind": "number",
+          "value": 1
+        },
+        "error": {
+          "kind": "host_error",
+          "message": "Failed."
+        },
+        "timing": {
+          "totalMs": 1
+        }
+      }
+    },
+    {
+      "name": "result/failure-completed-status",
+      "schema": "operation-result.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "x",
+        "ok": false,
+        "status": "completed",
+        "operation": "com.get",
+        "retryable": false,
+        "execution": "completed",
+        "targetState": "known",
+        "error": {
+          "kind": "host_error",
+          "message": "Failed."
+        },
+        "timing": {
+          "totalMs": 1
+        }
+      }
+    },
+    {
+      "name": "target/valid",
+      "schema": "target.schema.json",
+      "valid": true,
+      "instance": {
+        "id": "photoshop:27.7:pid-1234:start-2026-09-24T16:00:00Z",
+        "host": "photoshop",
+        "adapter": "photoshop-com",
+        "adapterVersion": "0.1.0",
+        "hostVersion": "27.7.0",
+        "generation": 2,
+        "state": "known",
+        "ownership": "preexisting",
+        "process": {
+          "pid": 1234,
+          "startedAt": "2026-09-24T16:00:00Z"
+        },
+        "capabilityFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "name": "target/pid-zero",
+      "schema": "target.schema.json",
+      "valid": false,
+      "instance": {
+        "id": "x",
+        "host": "illustrator",
+        "generation": 0,
+        "state": "known",
+        "ownership": "owned",
+        "process": {
+          "pid": 0,
+          "startedAt": "2026-09-24T16:00:00Z"
+        }
+      }
+    },
+    {
+      "name": "target/extra-field",
+      "schema": "target.schema.json",
+      "valid": false,
+      "instance": {
+        "id": "x",
+        "host": "illustrator",
+        "generation": 0,
+        "state": "known",
+        "ownership": "unknown",
+        "magic": true
+      }
+    },
+    {
+      "name": "capability/valid",
+      "schema": "capability.schema.json",
+      "valid": true,
+      "instance": {
+        "targetId": "illustrator:30.6:pid-6740",
+        "host": "illustrator",
+        "adapter": "illustrator-com",
+        "adapterVersion": "0.1.0",
+        "facets": {
+          "com": {
+            "version": 1,
+            "operations": [
+              "com.get",
+              "com.call",
+              "com.set"
+            ],
+            "metadata": {
+              "progid": "Illustrator.Application"
+            }
+          },
+          "script.extendscript": {
+            "version": 1,
+            "operations": [
+              "script.eval",
+              "script.run_file"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "capability/duplicate-operation",
+      "schema": "capability.schema.json",
+      "valid": false,
+      "instance": {
+        "targetId": "x",
+        "host": "illustrator",
+        "adapter": "a",
+        "adapterVersion": "1",
+        "facets": {
+          "com": {
+            "version": 1,
+            "operations": [
+              "com.get",
+              "com.get"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "workflow/valid",
+      "schema": "workflow.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "wf-1",
+        "target": {
+          "id": "illustrator:30.6:pid-6740",
+          "expectedGeneration": 4
+        },
+        "targetLease": true,
+        "onError": "stop",
+        "recovery": "reconcile",
+        "steps": [
+          {
+            "id": "read-name",
+            "operation": "com.get",
+            "input": {
+              "path": "ActiveDocument.Name"
+            }
+          },
+          {
+            "id": "set-note",
+            "operation": "com.set",
+            "input": {
+              "path": "ActiveDocument.Note",
+              "value": "x"
+            },
+            "policy": {
+              "retryBudgetMs": 1000,
+              "workerWatchdogMs": 5000,
+              "onAmbiguous": "reconcile"
+            },
+            "preconditions": [
+              {
+                "id": "doc",
+                "source": {
+                  "operation": "com.get",
+                  "input": {
+                    "path": "ActiveDocument.Name"
+                  }
+                },
+                "predicate": {
+                  "kind": "equals",
+                  "expected": {
+                    "kind": "string",
+                    "value": "fixture.ai"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "workflow/empty",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "wf-bad",
+        "target": {
+          "id": "x"
+        },
+        "steps": []
+      }
+    },
+    {
+      "name": "workflow/step-extra-field",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "wf-bad2",
+        "target": {
+          "id": "x"
+        },
+        "steps": [
+          {
+            "id": "s",
+            "operation": "com.get",
+            "input": {},
+            "mystery": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "event/valid",
+      "schema": "event.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "sequence": 42,
+        "timestamp": "2026-09-24T16:13:24.2203536Z",
+        "kind": "operation.completed",
+        "target": {
+          "id": "illustrator:30.6:pid-6740",
+          "expectedGeneration": 4
+        },
+        "operationId": "req-1",
+        "workerId": "wrk-9",
+        "payload": {
+          "status": "completed"
+        }
+      }
+    },
+    {
+      "name": "event/bad-timestamp",
+      "schema": "event.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "sequence": 42,
+        "timestamp": "not-a-date",
+        "kind": "operation.completed",
+        "payload": {}
+      }
+    },
+    {
+      "name": "assertion/equals",
+      "schema": "assertion.schema.json",
+      "valid": true,
+      "instance": {
+        "id": "a1",
+        "source": {
+          "operation": "com.get",
+          "input": {
+            "path": "Version"
+          }
+        },
+        "predicate": {
+          "kind": "equals",
+          "expected": {
+            "kind": "string",
+            "value": "30.6.0"
+          }
+        }
+      }
+    },
+    {
+      "name": "assertion/truthy-with-expected",
+      "schema": "assertion.schema.json",
+      "valid": false,
+      "instance": {
+        "id": "a2",
+        "source": {
+          "operation": "com.get",
+          "input": {
+            "path": "Visible"
+          }
+        },
+        "predicate": {
+          "kind": "truthy",
+          "expected": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      }
+    },
+    {
+      "name": "portable/string",
+      "schema": "portable-value.schema.json",
+      "valid": true,
+      "instance": {
+        "kind": "string",
+        "value": "true"
+      }
+    },
+    {
+      "name": "portable/string-type",
+      "schema": "portable-value.schema.json",
+      "valid": false,
+      "instance": {
+        "kind": "string",
+        "value": true
+      }
+    },
+    {
+      "name": "portable/null",
+      "schema": "portable-value.schema.json",
+      "valid": true,
+      "instance": {
+        "kind": "null"
+      }
+    },
+    {
+      "name": "portable/artifact",
+      "schema": "portable-value.schema.json",
+      "valid": true,
+      "instance": {
+        "kind": "artifact",
+        "value": {
+          "id": "artifact-1",
+          "mediaType": "application/json",
+          "bytes": 123,
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "expiresAt": "2026-09-24T17:00:00Z"
+        }
+      }
+    },
+    {
+      "name": "portable/artifact-bad-sha",
+      "schema": "portable-value.schema.json",
+      "valid": false,
+      "instance": {
+        "kind": "artifact",
+        "value": {
+          "id": "a",
+          "sha256": "xyz"
+        }
+      }
+    }
+  ]
+}

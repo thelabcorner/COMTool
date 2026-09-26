@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/value.schema.json",
+  "title": "ProtocolValue",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["null", "string", "number", "boolean", "array", "object"]
+    },
+    "value": {}
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "null" } } }, "then": { "not": { "required": ["value"] } } },
+    { "if": { "properties": { "kind": { "const": "string" } } }, "then": { "required": ["value"], "properties": { "value": { "type": "string" } } } },
+    { "if": { "properties": { "kind": { "const": "number" } } }, "then": { "required": ["value"], "properties": { "value": { "type": "number" } } } },
+    { "if": { "properties": { "kind": { "const": "boolean" } } }, "then": { "required": ["value"], "properties": { "value": { "type": "boolean" } } } },
+    { "if": { "properties": { "kind": { "const": "array" } } }, "then": { "required": ["value"], "properties": { "value": { "type": "array" } } } },
+    { "if": { "properties": { "kind": { "const": "object" } } }, "then": { "required": ["value"], "properties": { "value": { "type": "object" } } } }
+  ]
+}

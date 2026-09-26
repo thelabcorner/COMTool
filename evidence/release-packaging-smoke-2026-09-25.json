@@ -1,0 +1,39 @@
+{
+  "date": "2026-09-25",
+  "purpose": "Development-only validation of production release packaging and user-scoped install lifecycle",
+  "release": {
+    "version": "0.1.0-dev",
+    "rid": "win-x64",
+    "sourceCommit": "229abb816f991cbbf135e5b60aad7db55efe0fb2",
+    "sourceDirty": true,
+    "fileCount": 247,
+    "archiveSha256": "5068e16fe199a3736be241854eb985f502cdebd3008e563bf5d7f23ddc1071a1"
+  },
+  "verification": {
+    "releaseBuild": {
+      "warnings": 0,
+      "errors": 0
+    },
+    "deterministicTests": {
+      "passed": 275,
+      "failed": 0
+    },
+    "dirtyPackageDefaultInstall": "rejected",
+    "dirtyPackageExplicitDevelopmentInstall": "passed",
+    "installedRuntimeHealth": "passed",
+    "reportedStateSchemaVersion": 1,
+    "duplicateRuntimeGuard": {
+      "exitCode": 3,
+      "errorKind": "runtime_already_running"
+    },
+    "uninstall": {
+      "installedVersionRemoved": true,
+      "durableStatePreserved": true
+    }
+  },
+  "notes": [
+    "This artifact is not a production release because the source tree was intentionally dirty during validation.",
+    "Production release.ps1 refuses dirty or untracked V2 source by default.",
+    "Authenticode was subsequently made optional for production by explicit product policy; unsigned packages remain protected by manifest, per-file SHA-256, and archive SHA-256 integrity checks. See production-hardening-2026-09-25.json."
+  ]
+}

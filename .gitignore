@@ -1,0 +1,7 @@
+.dotnet/
+.bootstrap/
+**/bin/
+**/obj/
+.artifacts/
+*.user
+*.suo

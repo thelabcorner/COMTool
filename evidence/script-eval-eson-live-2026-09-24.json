@@ -1,0 +1,78 @@
+{
+  "date": "2026-09-24",
+  "host": {
+    "family": "illustrator",
+    "version": "30.6.0",
+    "targetId": "illustrator:51e2210cf5947181448c968f"
+  },
+  "scriptEval": {
+    "transport": "ESON",
+    "embeddedRuntimeSha256": "c368d65f3b9c23ac5972cdb3cebf492a04f52cf04bd5f4c23b5a388da2a83e93",
+    "deterministicTests": 119,
+    "liveCases": [
+      {
+        "id": "eson-live-string-001",
+        "kind": "string",
+        "value": "30.6.0",
+        "executeMs": 11.3714,
+        "totalMs": 338.7266,
+        "firstTouch": true
+      },
+      {
+        "id": "eson-live-args-001",
+        "kind": "number",
+        "value": 5,
+        "executeMs": 1.1644,
+        "totalMs": 10.7361
+      },
+      {
+        "id": "eson-live-bool-001",
+        "kind": "boolean",
+        "value": true,
+        "executeMs": 0.9329,
+        "totalMs": 9.4297
+      },
+      {
+        "id": "eson-live-object-002",
+        "kind": "object",
+        "value": {
+          "s": "true",
+          "n": 2,
+          "b": true,
+          "a": [
+            1,
+            null,
+            "x"
+          ]
+        },
+        "executeMs": 1.0258,
+        "totalMs": 9.2462
+      }
+    ]
+  },
+  "durableReplay": {
+    "runtimeRestarted": true,
+    "requestId": "eson-live-object-002",
+    "replayExecuteMs": 0,
+    "replayTotalMs": 22.6472,
+    "workerCountBefore": 0,
+    "workerCountAfter": 0,
+    "replayEvidence": "mutation.replay",
+    "mismatchedIntentRejected": true,
+    "mismatchTotalMs": 0.8549
+  },
+  "crossProcessLease": {
+    "secondRuntimeRejected": true,
+    "errorKind": "target_leased_external",
+    "rejectTotalMs": 5.3598,
+    "firstReleaseMs": 2.5307,
+    "secondAcquireAfterReleaseMs": 12.9277
+  },
+  "safety": {
+    "existingLegacyComToolModified": false,
+    "liveScriptsWereObservational": true,
+    "effectsClassifiedConservatively": "unknown",
+    "isolatedNamedRuntimePipes": true,
+    "isolatedMutationLedgers": true
+  }
+}

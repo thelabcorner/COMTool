@@ -1,0 +1,64 @@
+{
+  "date": "2026-09-25",
+  "scope": "COM Tool V2 production hardening after release-readiness pickup",
+  "deterministicGate": {
+    "releaseBuild": {
+      "warnings": 0,
+      "errors": 0
+    },
+    "tests": {
+      "passed": 285,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "runtimeHardening": {
+    "stateRootSchemaVersion": 1,
+    "stateRootManifest": "state-manifest.json",
+    "unsupportedStateSchemaFailsClosed": true,
+    "preV1CustomMutationLayoutFailsClosed": true,
+    "workerPreHandshakeExitFailsFast": true,
+    "workerStartupDiagnosticBounded": true,
+    "runtimeStartupErrorsStructuredOnStderr": true
+  },
+  "releaseHardening": {
+    "dirtySourceRejectedByDefault": true,
+    "unsignedProductionReleaseAllowed": true,
+    "authenticodeRequiredForProduction": false,
+    "latestFullDevelopmentReleaseVersion": "0.1.3-dev",
+    "latestFullDevelopmentReleaseArchiveSha256": "26cb55858f347c54f8d6390b0067ffcf9750919619251da1da3fd0af4a3d13e2",
+    "transactionalReleaseFinalization": true,
+    "immutableReleaseVersions": true,
+    "authenticodeFirstPartyBoundary": "ComTool.*.exe/.dll",
+    "vendorRuntimeBinariesResigned": false,
+    "signedFileSetRecordedInManifest": true,
+    "installerRevalidatesManifestHashes": true,
+    "installerRevalidatesDeclaredAuthenticodeFiles": true,
+    "installerRejectsUnlistedPayloadFiles": true,
+    "installerRejectsCorruptedInstalledPayload": true,
+    "installerRejectsVersionPathTraversal": true,
+    "uninstallerRejectsVersionPathTraversal": true,
+    "dirtyDevelopmentPackageRequiresExplicitOverride": true,
+    "developmentInstallSmoke": "passed",
+    "installerAdversarialSmoke": "passed",
+    "uninstallSmoke": "passed",
+    "durableStatePreservedByDefault": true
+  },
+  "liveIllustratorGate": {
+    "attempted": true,
+    "freshHostLaunched": true,
+    "snapshotDisposableDocument": "passed",
+    "wave4ArtboardRead": "passed",
+    "wave4LayerRead": "passed",
+    "cleanupRestoredDocumentCount": true,
+    "controlledMutationVerification": "incomplete",
+    "controlledMutationBlocker": "A later rerun found one open Illustrator document and the harness correctly refused to mutate it.",
+    "userDocumentModified": false,
+    "note": "Initial fresh-host disposable snapshot and structure-read gates passed. The controlled mutation harness is fail-closed whenever any document is already open."
+  },
+  "remainingExternalReleaseInputs": [
+    "A clean/tracked source-control baseline is required before release.ps1 will emit a production artifact.",
+    "Authenticode credentials are optional and are not a production release requirement.",
+    "Live controlled-mutation reconciliation and restart/reconnect closure remain host-dependent gates."
+  ]
+}

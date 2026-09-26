@@ -1,0 +1,14 @@
+{
+  "gate": "0E",
+  "ok": true,
+  "sdk": "ModelContextProtocol 2.2.0",
+  "tools": ["adobe_execute", "adobe_status"],
+  "checks": {
+    "toolsDiscovered": true,
+    "statusNotError": true,
+    "executeNotError": true,
+    "statusParity": true,
+    "executeParity": true
+  },
+  "stderrLines": 0
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/result.schema.json",
+  "title": "OperationResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "id", "operation", "ok", "status", "targetState"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "operation": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "ok": { "type": "boolean" },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "invalid_request", "unsupported_operation", "failed", "host_busy", "target_unavailable", "reconciliation_required"]
+    },
+    "targetState": {
+      "type": "string",
+      "enum": ["known", "known_changed", "busy", "reconciliation_required", "unavailable"]
+    },
+    "result": {
+      "oneOf": [
+        { "$ref": "value.schema.json" },
+        { "type": "null" }
+      ]
+    },
+    "error": {
+      "oneOf": [
+        { "$ref": "error.schema.json" },
+        { "type": "null" }
+      ]
+    },
+    "evidence": {
+      "type": ["array", "null"],
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "value"],
+        "properties": {
+          "kind": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "value": {}
+        }
+      }
+    },
+    "timing": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "queueMs": { "type": ["number", "null"], "minimum": 0 },
+        "executeMs": { "type": ["number", "null"], "minimum": 0 },
+        "verifyMs": { "type": ["number", "null"], "minimum": 0 },
+        "totalMs": { "type": ["number", "null"], "minimum": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "date": "2026-09-24",
+  "test": "production-target-supervisor-live-smoke",
+  "host": "illustrator",
+  "hostVersion": "30.6.0",
+  "targetId": "illustrator:a264161bbff5feaadb148e3f",
+  "result": "pass",
+  "concurrentReads": {
+    "count": 50,
+    "allCompleted": true,
+    "sameWorker": true,
+    "wallMs": 6789.12,
+    "minResultMs": 620.462,
+    "medianResultMs": 3832.574,
+    "maxResultMs": 6778.858
+  },
+  "workerLifecycle": {
+    "firstWorkerId": "worker-a190c0fbd03145dfb710edb5422118f2",
+    "firstWorkerPid": 32428,
+    "secondWorkerId": "worker-c043180eda144d2fb7d0d1cf095309ca",
+    "secondWorkerPid": 60220,
+    "apartment": "STA",
+    "workerChanged": true
+  },
+  "recovery": {
+    "injectedIncident": "smoke_ambiguous_mutation",
+    "stateBeforeRestart": "reconciliation_required",
+    "stateAfterRestart": "reconciliation_required",
+    "ambiguitySurvivedRestart": true,
+    "reconciled": true,
+    "stateAfterReconcile": "known"
+  },
+  "safety": {
+    "mutationExecuted": false,
+    "existingComToolModified": false
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/workflow.schema.json",
+  "title": "WorkflowRequest (reserved v1 shape)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "id", "steps", "onError"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "target": { "oneOf": [{ "$ref": "target.schema.json" }, { "type": "null" }] },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1024,
+      "items": { "$ref": "request.schema.json" }
+    },
+    "onError": { "type": "string", "enum": ["stop", "continue"] },
+    "targetLease": { "type": "boolean", "default": true }
+  }
+}

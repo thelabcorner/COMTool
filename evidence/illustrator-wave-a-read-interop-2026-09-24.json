@@ -1,0 +1,85 @@
+{
+  "date": "2026-09-24",
+  "result": "pass",
+  "host": {
+    "family": "illustrator",
+    "version": "30.6.0"
+  },
+  "implemented": [
+    "core.target.snapshot richer COM-only fingerprint",
+    "com.get",
+    "com.call.read"
+  ],
+  "safety": {
+    "com.getMutationClass": "read_only",
+    "com.call.readMutationClass": "read_only",
+    "genericComCallEnabled": false,
+    "scriptEvalEnabled": false,
+    "readCallAllowlist": [
+      "GetActiveArtboardIndex",
+      "GetNumSelectedArtboard",
+      "GetByName",
+      "GetPageItemFromUuid",
+      "IsViewClippedToArtboards"
+    ],
+    "mutationMethodSaveRejectedBeforeExecution": true
+  },
+  "liveEvidence": {
+    "snapshotDisposableSmoke": {
+      "passed": true,
+      "documentsBefore": 0,
+      "documentsAfter": 0,
+      "selectedPageItemType": 5,
+      "selectedPageItemTypeName": "path",
+      "selectionUuidObserved": true,
+      "selectionBoundsObserved": true
+    },
+    "get": {
+      "Version": "30.6.0",
+      "Documents0Name": "Untitled-1",
+      "Artboards0Name": "Artboard 1"
+    },
+    "callRead": {
+      "Documents0.Artboards.GetActiveArtboardIndex": 0,
+      "Documents0.IsViewClippedToArtboards": false,
+      "Documents0.Artboards.GetByName": {
+        "_comType": "System.__ComObject",
+        "name": "Artboard 1"
+      }
+    },
+    "transportParity": {
+      "operation": "com.get",
+      "path": "Version",
+      "direct": {
+        "value": "30.6.0",
+        "totalMs": 69.813
+      },
+      "broker": {
+        "value": "30.6.0",
+        "totalMs": 154.793
+      },
+      "runtime": {
+        "value": "30.6.0",
+        "totalMs": 1.8365
+      }
+    }
+  },
+  "rcwLifetimeFinding": {
+    "finding": "Illustrator child query methods can fail if an intermediate parent RCW is FinalReleaseComObject'd before the child method executes.",
+    "probe": "direct dynamic, reflection InvokeMember, and cached CSharp binder all succeeded against the same GetActiveArtboardIndex call",
+    "fix": "retain intermediate parent RCWs for the duration of com.call.read, release chain in reverse after result conversion",
+    "postFixSequencePassed": [
+      "Documents[0].Name",
+      "Documents[0].Artboards.GetActiveArtboardIndex",
+      "Documents[0].IsViewClippedToArtboards",
+      "Documents[0].Name"
+    ]
+  },
+  "verification": {
+    "schemaFixturesMatched": 30,
+    "schemaFixturesTotal": 30,
+    "deterministicTestsPassing": 58,
+    "solutionBuildWarnings": 0,
+    "solutionBuildErrors": 0
+  }
+}

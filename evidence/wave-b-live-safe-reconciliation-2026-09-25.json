@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-25",
+  "scope": "COM Tool V2 Wave B live safe-route validation",
+  "host": "illustrator",
+  "validation": {
+    "freshStagedRuntime": true,
+    "runtimeHealth": "passed",
+    "operationCapabilitiesAdvertised": [
+      "illustrator.artboard.setName",
+      "illustrator.document.read",
+      "illustrator.document.create",
+      "illustrator.document.open",
+      "illustrator.document.save",
+      "illustrator.document.saveAs",
+      "illustrator.document.close"
+    ],
+    "mutationReconcile": {
+      "requestUsedValidLease": true,
+      "matchingDurableIncidentExisted": false,
+      "resultErrorKind": "no_reconciliation_incident",
+      "resultTargetState": "known",
+      "incidentCleared": false
+    },
+    "leaseReleased": true,
+    "mutationOperationsDispatched": false,
+    "userDocumentModified": false
+  },
+  "deterministicGate": {
+    "build": {
+      "command": "scripts/dotnet.ps1 build ComTool.V2.slnx -c Release",
+      "warnings": 0,
+      "errors": 0
+    },
+    "tests": {
+      "command": "scripts/dotnet.ps1 test ComTool.V2.slnx -c Release --no-build",
+      "passed": 250,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "limitations": [
+    "The live check verified capability advertisement and the no-incident reconciliation fail-safe only.",
+    "Controlled artboard/document mutations were covered by deterministic adapter tests and were not dispatched against the user's open document.",
+    "A successful live reconciliation after an induced ambiguous mutation remains unverified."
+  ]
+}

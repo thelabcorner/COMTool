@@ -1,0 +1,89 @@
+{
+  "date": "2026-09-26",
+  "scope": "COM Tool V2 current-tree production hardening and unsigned release validation",
+  "productionPolicy": {
+    "authenticodeRequired": false,
+    "unsignedProductionReleaseAllowed": true,
+    "integrityModel": [
+      "schema-versioned release manifest",
+      "complete per-file SHA-256 inventory",
+      "archive SHA-256 sidecar",
+      "clean tracked source provenance",
+      "locked generic and win-x64 dependency graphs",
+      "direct and transitive NuGet vulnerability audit"
+    ]
+  },
+  "deterministicGate": {
+    "releaseBuild": {
+      "warnings": 0,
+      "errors": 0
+    },
+    "tests": {
+      "passed": 285,
+      "failed": 0,
+      "skipped": 0
+    },
+    "warningsAsErrors": true,
+    "releaseSupportToolsIncludedInSolution": true
+  },
+  "dependencyReproducibility": {
+    "genericLockfiles": "packages.lock.json",
+    "shippingRid": "win-x64",
+    "ridLockfiles": "packages.win-x64.lock.json",
+    "genericLockedRestore": "passed",
+    "shippingRidLockedRestore": "passed",
+    "vulnerabilityAudit": {
+      "includeTransitive": true,
+      "records": 0,
+      "source": "https://api.nuget.org/v3/index.json"
+    }
+  },
+  "latestFullDevelopmentRelease": {
+    "version": "0.1.5-dev",
+    "runtimeIdentifier": "win-x64",
+    "sourceCommit": "229abb816f991cbbf135e5b60aad7db55efe0fb2",
+    "sourceDirty": true,
+    "authenticode": false,
+    "authenticodeRequiredForProduction": false,
+    "archiveSha256": "f73512fe4e279e6f4972108b1538968e6b50f9178b1c3abbd46195d884e0c724",
+    "dependencyVulnerabilityRecords": 0,
+    "transactionalFinalization": true,
+    "immutableVersionDirectory": true,
+    "installedArtifactSmoke": {
+      "passed": true,
+      "runtimeVersion": "0.1.5.0",
+      "runtimeInformationalVersion": "0.1.5-dev+229abb816f991cbbf135e5b60aad7db55efe0fb2",
+      "stateSchemaVersion": 1,
+      "knownTargetsWithoutHost": 0
+    }
+  },
+  "installerHardening": {
+    "rejectsDirtyPackageWithoutExplicitDevelopmentOverride": true,
+    "rejectsUnlistedFiles": true,
+    "rejectsManifestPathTraversal": true,
+    "rejectsVersionPathTraversal": true,
+    "rejectsCorruptedInstalledPayloadReuse": true,
+    "rollbackSkipsCorruptFallbacks": true,
+    "rollbackSelectsOlderVerifiedFallback": true,
+    "rollbackRefusesCurrentRemovalWhenNoVerifiedFallbackExists": true,
+    "durableStatePreservedByDefault": true
+  },
+  "runtimeHardening": {
+    "stateSchemaVersion": 1,
+    "unsupportedStateSchemaFailsClosed": true,
+    "legacyMutationLayoutFailsClosed": true,
+    "workerPreHandshakeExitFailsFast": true,
+    "workerStartupDiagnosticsStructuredAndBounded": true,
+    "runtimeHealthReportsBuildProvenance": true
+  },
+  "liveIllustratorStatus": {
+    "wave4DisposableStructureRead": "passed previously on Illustrator 30.6.0",
+    "controlledMutationAndRestartHarness": "ready",
+    "currentRunBlockedSafely": "Illustrator already open; harness refuses to mutate or terminate a pre-existing host",
+    "userDocumentModified": false
+  },
+  "remainingProductionInputs": [
+    "Track/commit the currently untracked COM Tool V2 subtree so the clean-source production release gate can pass.",
+    "Run the owned-host LiveConformance controlled-mutation/reconciliation/restart sequence when no pre-existing Illustrator process is open."
+  ]
+}

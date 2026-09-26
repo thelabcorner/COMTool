@@ -1,0 +1,34 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ComTool.Broker.Protocol/ComTool.Broker.Protocol.csproj" />
+    <Project Path="src/ComTool.Cli/ComTool.Cli.csproj" />
+    <Project Path="src/ComTool.Hosts.Abstractions/ComTool.Hosts.Abstractions.csproj" />
+    <Project Path="src/ComTool.Hosts.Illustrator/ComTool.Hosts.Illustrator.csproj" />
+    <Project Path="src/ComTool.Protocol/ComTool.Protocol.csproj" />
+    <Project Path="src/ComTool.Runtime/ComTool.Runtime.csproj" />
+    <Project Path="src/ComTool.Runtime.Ipc/ComTool.Runtime.Ipc.csproj" />
+    <Project Path="src/ComTool.RuntimeHost/ComTool.RuntimeHost.csproj" />
+    <Project Path="src/ComTool.Supervisor/ComTool.Supervisor.csproj" />
+    <Project Path="src/ComTool.Transport.Mcp/ComTool.Transport.Mcp.csproj" />
+    <Project Path="src/ComTool.Transport.Pipe/ComTool.Transport.Pipe.csproj" />
+    <Project Path="src/ComTool.Transport.Stdio/ComTool.Transport.Stdio.csproj" />
+    <Project Path="src/ComTool.Worker/ComTool.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ComTool.Hosts.Illustrator.Tests/ComTool.Hosts.Illustrator.Tests.csproj" />
+    <Project Path="tests/ComTool.Protocol.Tests/ComTool.Protocol.Tests.csproj" />
+    <Project Path="tests/ComTool.Runtime.Ipc.Tests/ComTool.Runtime.Ipc.Tests.csproj" />
+    <Project Path="tests/ComTool.Runtime.Tests/ComTool.Runtime.Tests.csproj" />
+    <Project Path="tests/ComTool.Supervisor.Tests/ComTool.Supervisor.Tests.csproj" />
+    <Project Path="tests/ComTool.Transport.Mcp.Tests/ComTool.Transport.Mcp.Tests.csproj" />
+    <Project Path="tests/ComTool.Transport.Pipe.Tests/ComTool.Transport.Pipe.Tests.csproj" />
+    <Project Path="tests/ComTool.Transport.Stdio.Tests/ComTool.Transport.Stdio.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/ComTool.Illustrator.LiveConformance/ComTool.Illustrator.LiveConformance.csproj" />
+    <Project Path="tools/ComTool.Illustrator.Snapshot.Smoke/ComTool.Illustrator.Snapshot.Smoke.csproj" />
+    <Project Path="tools/ComTool.RuntimeHost.Smoke/ComTool.RuntimeHost.Smoke.csproj" />
+    <Project Path="tools/ComTool.Supervisor.Smoke/ComTool.Supervisor.Smoke.csproj" />
+    <Project Path="tools/schema-validator/SchemaValidator.csproj" />
+  </Folder>
+</Solution>

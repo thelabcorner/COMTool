@@ -1,0 +1,27 @@
+{
+  "date": "2026-09-25",
+  "scope": "Wave 4 live Illustrator structure-read conformance",
+  "host": {
+    "name": "Adobe Illustrator",
+    "version": "30.6.0",
+    "buildNumber": "109R"
+  },
+  "fixture": {
+    "documentsBefore": 0,
+    "disposableDocumentCreated": true,
+    "disposablePathItemCreated": true,
+    "documentsAfter": 0,
+    "saved": false
+  },
+  "checks": {
+    "snapshotDocumentCount": true,
+    "snapshotSelectionIdentity": true,
+    "snapshotSelectionBounds": true,
+    "snapshotActiveArtboard": true,
+    "illustrator.artboard.read": true,
+    "illustrator.layer.read": true,
+    "cleanupRestoredDocumentCount": true
+  },
+  "result": "passed",
+  "userDocumentModified": false
+}

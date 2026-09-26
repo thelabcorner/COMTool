@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:comtool-v2:schema:v1-draft:error",
+  "title": "OperationError",
+  "type": "object",
+  "required": ["kind", "message"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "message": { "type": "string", "minLength": 1, "maxLength": 16384 },
+    "code": {
+      "oneOf": [
+        { "type": "integer" },
+        { "type": "string", "minLength": 1, "maxLength": 256 }
+      ]
+    },
+    "nativeHex": { "type": "string", "pattern": "^0x[0-9A-Fa-f]+$" },
+    "route": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "suggestedAction": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "context": {}
+  },
+  "additionalProperties": false
+}

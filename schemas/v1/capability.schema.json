@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://comtool.dev/schema/v1/capability.schema.json",
+  "title": "CapabilityDescriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "mutationClass", "supported"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "mutationClass": {
+      "type": "string",
+      "enum": ["read_only", "idempotent_write", "conditional_write", "non_idempotent_write", "document_lifecycle", "external_side_effect", "unknown"]
+    },
+    "supported": { "type": "boolean" },
+    "host": { "type": ["string", "null"], "maxLength": 64 },
+    "description": { "type": ["string", "null"] },
+    "inputSchemaRef": { "type": ["string", "null"] },
+    "outputSchemaRef": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "gate": "0A",
+  "observedAt": "2026-09-24",
+  "ok": true,
+  "progId": "Illustrator.Application",
+  "mutationProbeRequested": true,
+  "apartment": "STA",
+  "illustratorVersion": "30.6.0",
+  "documentsBefore": 0,
+  "documentsAfter": 0,
+  "elapsedMs": 5838.805,
+  "steps": [
+    {"name":"apartment","ok":true,"evidence":{"apartment":"STA"}},
+    {"name":"resolve-progid","ok":true,"evidence":{"clsid":"9a4ba740-bebf-4409-b787-ac7a610771a6"}},
+    {"name":"attach-active-object","ok":true,"evidence":{"isComObject":true}},
+    {"name":"read-host-state","ok":true,"evidence":{"version":"30.6.0","documentCount":0}},
+    {"name":"do-javascript","ok":true,"evidence":{"result":"2"}},
+    {"name":"disposable-direct-dom-mutation","ok":true,"evidence":{"before":0,"afterAdd":1,"afterRemove":0}},
+    {"name":"close-disposable-document","ok":true,"evidence":{"savePolicy":"aiDoNotSaveChanges","savePolicyValue":2,"documentsBefore":0,"documentsAfter":0}}
+  ],
+  "remainingGateRequirement": "Illustrator process restart/reconnect has not been forced because the active user host must not be disrupted."
+}

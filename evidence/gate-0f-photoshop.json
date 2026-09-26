@@ -1,0 +1,27 @@
+{
+  "gate": "0F",
+  "ok": true,
+  "referenceHost": "photoshop",
+  "progId": "Photoshop.Application",
+  "launchedBySpike": true,
+  "elapsedMs": 7607.532,
+  "hostEvidence": {
+    "name": "Adobe Photoshop",
+    "version": "27.7.0",
+    "documentCount": 0,
+    "scriptSupported": true,
+    "scriptRoute": "com.DoJavaScript",
+    "scriptResult": "27.7.0"
+  },
+  "lifecycle": {
+    "ownership": "owned",
+    "quitIssuedOnlyBecauseOwnedAndZeroDocs": true,
+    "activeAfterOwnedQuit": false
+  },
+  "architecturalEvidence": {
+    "genericComFacet": true,
+    "hostSpecificDom": true,
+    "scriptingIsOptionalFacet": true,
+    "ownershipAwareLifecycle": true
+  }
+}

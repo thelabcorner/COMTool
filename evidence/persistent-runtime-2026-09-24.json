@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-24",
+  "result": "pass",
+  "host": {
+    "family": "illustrator",
+    "version": "30.6.0",
+    "targetId": "illustrator:a264161bbff5feaadb148e3f"
+  },
+  "topology": [
+    "cli/client",
+    "current-user runtime pipe",
+    "RuntimeSupervisor",
+    "authenticated STA worker",
+    "Illustrator COM"
+  ],
+  "liveMeasurements": {
+    "initialDiscoveryMs": 1217.424,
+    "cachedTargetsListMs": 0.316,
+    "firstTargetWorkerStatusTotalMs": 2054.6306,
+    "warmSnapshotTotalMs": 65.4001,
+    "warmStatusTotalMs": 100.0514
+  },
+  "runtimeSmokeEarlier": {
+    "firstStatusWallMs": 1698.221,
+    "warmStatusRuns": 20,
+    "warmMinMs": 32.32,
+    "warmMedianMs": 185.398,
+    "warmMaxMs": 204.318,
+    "liveWorkers": 1
+  },
+  "safety": {
+    "readOnly": true,
+    "legacyComToolModified": false,
+    "illustratorRestarted": false,
+    "networkListener": false,
+    "publicPipeCurrentUserOnly": true,
+    "workerBootstrapTokenBits": 256
+  },
+  "verification": {
+    "singleRuntimeInstance": true,
+    "shadowDeploymentBuildWhileRunning": true,
+    "solutionBuildWarnings": 0,
+    "solutionBuildErrors": 0,
+    "deterministicTestsPassing": 44
+  }
+}
