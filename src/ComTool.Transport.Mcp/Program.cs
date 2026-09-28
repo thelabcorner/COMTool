@@ -320,6 +320,10 @@ internal sealed class RuntimeBridge(string? defaultPipeName = null)
         string? targetHost,
         string? targetId,
         CancellationToken cancellationToken,
+        int? workerWatchdogMs = null,
+        int? retryBudgetMs = null,
+        string? preconditionsJson = null,
+        string? postconditionsJson = null,
         string? pipeName = null)
     {
         JsonElement input;
@@ -327,6 +331,23 @@ internal sealed class RuntimeBridge(string? defaultPipeName = null)
         {
             using var document = JsonDocument.Parse(inputJson);
             input = document.RootElement.Clone();
+        }
+        catch (JsonException ex)
+        {
+            return ProtocolJson.Serialize(
+                Invalid(operation, requestId, "invalid_json", ex.Message));
+        }
+
+        IReadOnlyList<OperationCondition>? preconditions;
+        IReadOnlyList<OperationCondition>? postconditions;
+        try
+        {
+            preconditions = ParseConditions(
+                preconditionsJson,
+                "preconditionsJson");
+            postconditions = ParseConditions(
+                postconditionsJson,
+                "postconditionsJson");
         }
         catch (JsonException ex)
         {
@@ -358,9 +379,17 @@ internal sealed class RuntimeBridge(string? defaultPipeName = null)
             Target = target,
             Operation = operation,
             Input = input,
-            Policy = string.IsNullOrWhiteSpace(leaseId)
-                ? null
-                : new OperationPolicy(LeaseId: leaseId)
+            Policy =
+                string.IsNullOrWhiteSpace(leaseId) &&
+                workerWatchdogMs is null &&
+                retryBudgetMs is null
+                    ? null
+                    : new OperationPolicy(
+                        WorkerWatchdogMs: workerWatchdogMs,
+                        LeaseId: leaseId,
+                        RetryBudgetMs: retryBudgetMs),
+            Preconditions = preconditions,
+            Postconditions = postconditions
         };
 
         try
@@ -434,6 +463,27 @@ internal sealed class RuntimeBridge(string? defaultPipeName = null)
                     retryable: true,
                     execution: ExecutionState.NotStarted,
                     ["start_runtime", "inspect_runtime"]));
+        }
+    }
+
+    private static IReadOnlyList<OperationCondition>? ParseConditions(
+        string? json,
+        string parameterName)
+    {
+        if (json is null)
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize(
+                json,
+                ProtocolJsonContext.Default.ListOperationCondition);
+        }
+        catch (JsonException ex)
+        {
+            throw new JsonException(
+                $"{parameterName} must be a JSON array of operation conditions: {ex.Message}",
+                ex);
         }
     }
 
@@ -512,6 +562,18 @@ internal sealed class AdobeTools(RuntimeBridge bridge)
         string? targetHost = null,
         [System.ComponentModel.Description("Opaque generation-specific target id.")]
         string? targetId = null,
+        [System.ComponentModel.Description(
+            "Optional worker watchdog in milliseconds (100-3600000).")]
+        int? workerWatchdogMs = null,
+        [System.ComponentModel.Description(
+            "Optional reject-before-execution COM retry budget in milliseconds (0-3600000); independent from the worker watchdog.")]
+        int? retryBudgetMs = null,
+        [System.ComponentModel.Description(
+            "Optional JSON array of OperationCondition preconditions copied into the canonical OperationRequest.")]
+        string? preconditionsJson = null,
+        [System.ComponentModel.Description(
+            "Optional JSON array of OperationCondition postconditions copied into the canonical OperationRequest.")]
+        string? postconditionsJson = null,
         CancellationToken cancellationToken = default) =>
         bridge.ExecuteAsync(
             operation,
@@ -520,5 +582,9 @@ internal sealed class AdobeTools(RuntimeBridge bridge)
             leaseId,
             targetHost,
             targetId,
-            cancellationToken);
+            cancellationToken,
+            workerWatchdogMs,
+            retryBudgetMs,
+            preconditionsJson,
+            postconditionsJson);
 }

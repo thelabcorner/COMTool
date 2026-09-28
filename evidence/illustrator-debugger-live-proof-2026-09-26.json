@@ -1,0 +1,246 @@
+﻿{
+    "schema":  "comtool-v2/live-evidence/1",
+    "kind":  "illustrator-debugger-live-proof",
+    "capturedAtUtc":  "2026-09-26T22:41:59.4583377Z",
+    "host":  {
+                 "product":  "Adobe Illustrator",
+                 "version":  "30.6.0",
+                 "processId":  67764,
+                 "processStartedAt":  "2026-09-26T17:18:25.9950628-05:00",
+                 "processStartedAtUtc":  "2026-09-26T22:18:25.9950628Z",
+                 "executablePath":  "C:\\Program Files\\Adobe\\Adobe Illustrator 2026\\Support Files\\Contents\\Windows\\Illustrator.exe",
+                 "targetId":  "illustrator:581d47d4a785d7125f8e051e",
+                 "targetGeneration":  0,
+                 "preflightGenerationMatch":  {
+                                                  "pidMatches":  true,
+                                                  "startTimeMatches":  true
+                                              },
+                 "documentsMutated":  false,
+                 "documentsCreatedSavedOrClosed":  false,
+                 "note":  "Existing user document was observed read-only and never created, renamed, saved, or closed. No break-glass host termination was used."
+             },
+    "runtime":  {
+                    "path":  "C:\\Program Files\\Adobe\\Adobe Illustrator 2026\\Presets\\en_US\\Scripts\\agent-skills\\illustrator-com-automation-skill\\comtool-v2\\.artifacts\\dev-runtime\\20260926-172750-031\\runtime\\ComTool.RuntimeHost.exe",
+                    "processId":  88248,
+                    "processStartedAtUtc":  "2026-09-26T22:37:49.9701671Z",
+                    "pipeName":  "comtool-v2-dbgproof-e35fa13e54024b6bbb0c6c483e6e0d21",
+                    "stateRoot":  "C:\\Program Files\\Adobe\\Adobe Illustrator 2026\\Presets\\en_US\\Scripts\\agent-skills\\illustrator-com-automation-skill\\comtool-v2\\.artifacts\\live-proof\\20260926-173126-18fabb0e\\state",
+                    "runtimeInformationalVersion":  "1.0.0+65ec79f776c8f89eed468401d7c5ca3253434eeb",
+                    "launchArgv":  [
+                                       "--pipe",
+                                       "comtool-v2-dbgproof-e35fa13e54024b6bbb0c6c483e6e0d21",
+                                       "--state-dir",
+                                       "C:\\Program Files\\Adobe\\Adobe Illustrator 2026\\Presets\\en_US\\Scripts\\agent-skills\\illustrator-com-automation-skill\\comtool-v2\\.artifacts\\live-proof\\20260926-173126-18fabb0e\\state",
+                                       "--worker",
+                                       "C:\\Program Files\\Adobe\\Adobe Illustrator 2026\\Presets\\en_US\\Scripts\\agent-skills\\illustrator-com-automation-skill\\comtool-v2\\.artifacts\\dev-runtime\\20260926-172750-031\\worker\\ComTool.Worker.exe",
+                                       "--host",
+                                       "illustrator"
+                                   ],
+                    "staging":  "scripts/stage-runtime-dev.ps1 immutable shadow; bin/Release never used for the long-lived runtime"
+                },
+    "worker":  {
+                   "path":  "C:\\Program Files\\Adobe\\Adobe Illustrator 2026\\Presets\\en_US\\Scripts\\agent-skills\\illustrator-com-automation-skill\\comtool-v2\\.artifacts\\dev-runtime\\20260926-172750-031\\worker\\ComTool.Worker.exe",
+                   "processId":  32952,
+                   "processStartedAtUtc":  "2026-09-26T22:39:15.4370094Z",
+                   "role":  "STA COM worker spawned by RuntimeSupervisor; owns the debugger resource"
+               },
+    "transportPath":  "Node SDK (sdk/node) -\u003e copied ComTool.Cli.exe stdio -\u003e isolated RuntimeHost pipe -\u003e RuntimeSupervisor -\u003e ComTool.Worker -\u003e Illustrator host adapter",
+    "noDirectBridgeInvocation":  true,
+    "retryPolicy":  "No retry after any possibly-submitted request. On transport/submission ambiguity the driver stops and reconciles explicitly.",
+    "ambiguous":  false,
+    "proofExitCode":  0,
+    "completedSequence":  true,
+    "lease":  {
+                  "id":  "E2D9543B2523661CF637A2FD75A55366169DD8F0ACA0E583F1DFBC8949C56877",
+                  "ttlMs":  120000,
+                  "acquiredAt":  "2026-09-26T22:39:19.5117596+00:00",
+                  "expiresAt":  "2026-09-26T22:41:19.5117596+00:00",
+                  "retained":  true,
+                  "releasedRequest":  null,
+                  "releasedHeld":  false
+              },
+    "debugger":  {
+                     "sessionId":  "dbg-b52486361b9446e3aec603b0e5cc4db2",
+                     "appSpec":  "illustrator-30.064",
+                     "engine":  "main",
+                     "engines":  [
+                                     "main",
+                                     "transient"
+                                 ],
+                     "transport":  "estk3",
+                     "workerOwned":  true,
+                     "childProcessId":  87204,
+                     "childProcessStartedAt":  "2026-09-26T17:39:19.5581204-05:00",
+                     "childAliveAfterClose":  false,
+                     "provenance":  {
+                                        "nodePath":  "C:\\Program Files\\nodejs\\node.exe",
+                                        "nodeVersion":  "22.23.2",
+                                        "addonPath":  "C:\\Users\\slooshied\\.vscode\\extensions\\adobe.extendscript-debug-2.0.2-win32-x64\\lib\\esdebugger-core\\win\\x64\\esdcorelibinterface.node",
+                                        "addonSha256":  "6295c57e95002e4c10a4081ee14ef86e35d081213dcc3553b34de51c44e4aaa2",
+                                        "addonSha256IndependentlyRecomputed":  "6295c57e95002e4c10a4081ee14ef86e35d081213dcc3553b34de51c44e4aaa2",
+                                        "addonPinMatchesIndependentHash":  true,
+                                        "bridgeAssetSource":  "src/ComTool.Hosts.Illustrator/Assets/esd-debugger-bridge.mjs (embedded resource ComTool.Hosts.Illustrator.Assets.esd-debugger-bridge.mjs)",
+                                        "bridgeSha256":  "16cc581e7b3be548e510695aa2125c31668c964784a4f3a5e915bd3b71497374",
+                                        "bridgeSha256IndependentlyRecomputed":  "16cc581e7b3be548e510695aa2125c31668c964784a4f3a5e915bd3b71497374",
+                                        "bridgePinMatchesIndependentHash":  true,
+                                        "hostsIllustratorDllSha256":  "28bd5a34029c83367e18bd9303fa832b201f98fe9202230b7a23a55e5184ed3b"
+                                    }
+                 },
+    "operations":  [
+                       {
+                           "order":  1,
+                           "requestId":  "dbgproof-health",
+                           "operation":  "core.runtime.health",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  false
+                       },
+                       {
+                           "order":  2,
+                           "requestId":  "illustrator:581d47d4a785d7125f8e051e",
+                           "operation":  "core.targets.list",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  false,
+                           "note":  "strong PID/start-time discovery"
+                       },
+                       {
+                           "order":  3,
+                           "requestId":  "dbgproof-target-status",
+                           "operation":  "core.target.status",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  false,
+                           "documentsCount":  1,
+                           "hostVersion":  "30.6.0",
+                           "buildNumber":  "109R"
+                       },
+                       {
+                           "order":  4,
+                           "requestId":  "(catalog)",
+                           "operation":  "core.operation.describe",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  false,
+                           "note":  "debug.session.open/command/close all external_side_effect, requiresLease=true, mutationResolution=fixed"
+                       },
+                       {
+                           "order":  5,
+                           "requestId":  "(lease)",
+                           "operation":  "core.target.lease.acquire",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  false,
+                           "leaseId":  "E2D9543B2523661CF637A2FD75A55366169DD8F0ACA0E583F1DFBC8949C56877"
+                       },
+                       {
+                           "order":  6,
+                           "requestId":  "dbgproof-debug-open",
+                           "operation":  "debug.session.open",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  true,
+                           "mutationClass":  "external_side_effect",
+                           "sessionId":  "dbg-b52486361b9446e3aec603b0e5cc4db2"
+                       },
+                       {
+                           "order":  7,
+                           "requestId":  "dbgproof-debug-get-breakpoints",
+                           "operation":  "debug.session.command",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  true,
+                           "mutationClass":  "external_side_effect",
+                           "command":  "get-breakpoints",
+                           "note":  "single harmless read command",
+                           "esdResponseBody":  "\u003cbreakpoints flags=\"0\" engine=\"main\"/\u003e",
+                           "esdTarget":  "comtoolv2_87204-2.0#dbg",
+                           "esdSerialNumber":  3,
+                           "normalizedTag":  "breakpoints"
+                       },
+                       {
+                           "order":  8,
+                           "requestId":  "dbgproof-debug-close",
+                           "operation":  "debug.session.close",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  true,
+                           "mutationClass":  "external_side_effect",
+                           "closed":  true,
+                           "graceful":  true,
+                           "exitObserved":  true
+                       },
+                       {
+                           "order":  9,
+                           "requestId":  null,
+                           "operation":  "core.target.lease.release",
+                           "ok":  true,
+                           "status":  "completed",
+                           "execution":  null,
+                           "mutating":  false
+                       }
+                   ],
+    "operationRegistryLive":  [
+
+                              ],
+    "mutationLedgerRecords":  [
+                                  {
+                                      "fileSha256Name":  "4970e4fab8508f50deeeeda459c5f19a5a5829539def76151050f6281a4a4527",
+                                      "requestId":  "dbgproof-debug-close",
+                                      "operation":  "debug.session.close",
+                                      "mutationClass":  "external_side_effect",
+                                      "phase":  1,
+                                      "incidentKind":  null,
+                                      "preparedAt":  "2026-09-26T22:39:20.6758529+00:00",
+                                      "updatedAt":  "2026-09-26T22:39:20.7041161+00:00",
+                                      "reconciliationFingerprint":  null
+                                  },
+                                  {
+                                      "fileSha256Name":  "bd059e5d8a66133762ecafee0bf41f65edb6c76df3da0688c24ad1414f8e0274",
+                                      "requestId":  "dbgproof-debug-get-breakpoints",
+                                      "operation":  "debug.session.command",
+                                      "mutationClass":  "external_side_effect",
+                                      "phase":  1,
+                                      "incidentKind":  null,
+                                      "preparedAt":  "2026-09-26T22:39:20.1415007+00:00",
+                                      "updatedAt":  "2026-09-26T22:39:20.6687254+00:00",
+                                      "reconciliationFingerprint":  null
+                                  },
+                                  {
+                                      "fileSha256Name":  "ceadc045e284123bb6f71fab993aeee6159da4cdec7be0d7a99ddefd9832f50e",
+                                      "requestId":  "dbgproof-debug-open",
+                                      "operation":  "debug.session.open",
+                                      "mutationClass":  "external_side_effect",
+                                      "phase":  1,
+                                      "incidentKind":  null,
+                                      "preparedAt":  "2026-09-26T22:39:19.5244344+00:00",
+                                      "updatedAt":  "2026-09-26T22:39:20.1306918+00:00",
+                                      "reconciliationFingerprint":  null
+                                  }
+                              ],
+    "unresolvedIncidents":  [
+
+                            ],
+    "containment":  {
+                        "debuggerChildOwner":  "ComTool.Worker",
+                        "debuggerChildKill":  "DebuggerBridge.Close -\u003e Process.Kill(entireProcessTree: true)",
+                        "workerKill":  "WorkerBrokerClient.TerminateOwnedProcessAsync / KillOwnedWorkerAsync -\u003e Process.Kill(entireProcessTree: true)",
+                        "supervisorPath":  "TargetSupervisor.ForceAbortCurrentWorkerAsync -\u003e WorkerBrokerClient.ForceTerminateAsync",
+                        "note":  "No additional process authority was added. The debugger child is a descendant of the worker, and the Supervisor already terminates the worker with entireProcessTree: true, so containment is transitive. core.target.host.terminate deliberately uses entireProcessTree: false on the Illustrator process itself so the user host tree is never killed."
+                    },
+    "transcriptPath":  ".artifacts/live-proof/20260926-173126-18fabb0e/transcript.json",
+    "noPromotion":  {
+                        "published":  false,
+                        "installed":  false,
+                        "promoted":  false,
+                        "versionChanged":  false
+                    }
+}

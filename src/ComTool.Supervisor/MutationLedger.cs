@@ -350,7 +350,8 @@ internal sealed class MutationLedger
     public void Finalize(
         MutationLedgerRecord prepared,
         OperationResult result,
-        bool executionWasDispatched = true)
+        bool executionWasDispatched = true,
+        bool notStartedCertifiedByCurrentWorker = false)
     {
         ArgumentNullException.ThrowIfNull(prepared);
         ArgumentNullException.ThrowIfNull(result);
@@ -359,7 +360,8 @@ internal sealed class MutationLedger
         {
             var phase = ClassifyTerminalPhase(
                 result,
-                executionWasDispatched);
+                executionWasDispatched,
+                notStartedCertifiedByCurrentWorker);
             var incidentKind =
                 phase == MutationLedgerPhase.Ambiguous
                     ? result.Error?.Kind ?? "mutation_outcome_ambiguous"
@@ -440,7 +442,8 @@ internal sealed class MutationLedger
         string requestId,
         bool changed,
         string rationale,
-        JsonElement? evidence)
+        JsonElement? evidence,
+        DateTimeOffset? expectedUpdatedAt = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(targetId);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestId);
@@ -480,6 +483,15 @@ internal sealed class MutationLedger
                 throw new MutationLedgerException(
                     "mutation_incident_not_unresolved",
                     $"Mutation request '{requestId}' is not in an unresolved phase.");
+            }
+
+            if (expectedUpdatedAt is { } expected &&
+                active.UpdatedAt.ToUniversalTime() !=
+                    expected.ToUniversalTime())
+            {
+                throw new MutationLedgerException(
+                    "mutation_incident_revision_conflict",
+                    "The durable mutation incident changed after it was inspected. List incidents again before resolving it.");
             }
 
             var now = DateTimeOffset.UtcNow;
@@ -876,7 +888,8 @@ internal sealed class MutationLedger
 
     private static MutationLedgerPhase ClassifyTerminalPhase(
         OperationResult result,
-        bool executionWasDispatched)
+        bool executionWasDispatched,
+        bool notStartedCertifiedByCurrentWorker)
     {
         var execution = result.Error?.Execution;
 
@@ -894,13 +907,19 @@ internal sealed class MutationLedger
 
         if (execution == ExecutionState.NotStarted)
         {
-            // Once the worker dispatch boundary has been crossed, a returned
-            // NotStarted claim is not strong enough to erase the durable
-            // prepared marker. A buggy/older worker must not be able to make
-            // a possibly executed mutation replayable.
-            return executionWasDispatched
-                ? MutationLedgerPhase.Ambiguous
-                : MutationLedgerPhase.NotStarted;
+            // A bare NotStarted claim received after the worker dispatch
+            // boundary remains insufficient: an older or incompatible worker
+            // must never make a possibly executed mutation replayable.
+            //
+            // Broker v3 adds an authenticated, correlated worker disposition
+            // that explicitly certifies the host operation returned before
+            // entering its external effect. Only that current-worker
+            // certificate (or a failure before dispatch) may clear the
+            // prepared marker as NotStarted.
+            return !executionWasDispatched ||
+                   notStartedCertifiedByCurrentWorker
+                ? MutationLedgerPhase.NotStarted
+                : MutationLedgerPhase.Ambiguous;
         }
 
         return MutationLedgerPhase.Ambiguous;

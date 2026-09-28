@@ -100,6 +100,40 @@ public sealed class TargetLeaseManagerTests
     }
 
     [Fact]
+    public void RenewAtLeastNeverShortensExistingLease()
+    {
+        var now = DateTimeOffset.Parse("2026-09-24T12:00:00Z");
+        var leases = new TargetLeaseManager(() => now);
+        var grant = leases.Acquire(120_000);
+
+        now = now.AddSeconds(2);
+        var renewed = leases.RenewAtLeast(
+            grant.LeaseId,
+            40_000);
+
+        Assert.Equal(grant.LeaseId, renewed.LeaseId);
+        Assert.Equal(grant.AcquiredAt, renewed.AcquiredAt);
+        Assert.Equal(grant.ExpiresAt, renewed.ExpiresAt);
+    }
+
+    [Fact]
+    public void RenewAtLeastExtendsLeaseWhenMinimumExceedsRemainingTime()
+    {
+        var now = DateTimeOffset.Parse("2026-09-24T12:00:00Z");
+        var leases = new TargetLeaseManager(() => now);
+        var grant = leases.Acquire(30_000);
+
+        now = now.AddSeconds(20);
+        var renewed = leases.RenewAtLeast(
+            grant.LeaseId,
+            40_000);
+
+        Assert.Equal(grant.LeaseId, renewed.LeaseId);
+        Assert.Equal(grant.AcquiredAt, renewed.AcquiredAt);
+        Assert.Equal(now.AddSeconds(40), renewed.ExpiresAt);
+    }
+
+    [Fact]
     public void ExpiredLeaseIsRemovedLazilyAndNoLongerBlocks()
     {
         var now = DateTimeOffset.Parse("2026-09-24T12:00:00Z");
@@ -125,9 +159,20 @@ public sealed class TargetLeaseManagerTests
         Assert.False(leases.Status.Held);
     }
 
+    [Fact]
+    public void MaximumTtlCoversMaximumWatchdogAndRecoveryGrace()
+    {
+        var leases = new TargetLeaseManager();
+        var grant = leases.Acquire(TargetLeaseManager.MaxTtlMs);
+
+        Assert.Equal(
+            TargetLeaseManager.MaxTtlMs,
+            grant.TtlMs);
+    }
+
     [Theory]
     [InlineData(999)]
-    [InlineData(300001)]
+    [InlineData(3_720_001)]
     public void InvalidTtlIsRejected(int ttlMs)
     {
         var leases = new TargetLeaseManager();

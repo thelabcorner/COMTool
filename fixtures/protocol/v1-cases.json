@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "name": "v1/request-basic",
+      "schema": "request.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-v1-basic",
+        "operation": "core.runtime.health",
+        "input": null
+      }
+    },
+    {
+      "name": "v1/request-target-policy-condition",
+      "schema": "request.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-v1-guarded",
+        "target": {
+          "host": "illustrator",
+          "id": "illustrator:4242:20260927T120000Z",
+          "generation": 0
+        },
+        "operation": "com.set",
+        "input": {
+          "path": "ActiveDocument.Name",
+          "value": "fixture.ai"
+        },
+        "policy": {
+          "workerWatchdogMs": 1000,
+          "retryBudgetMs": 0,
+          "leaseId": "0123456789abcdef0123456789abcdef"
+        },
+        "preconditions": [
+          {
+            "id": "document-name",
+            "source": {
+              "operation": "com.get",
+              "input": {
+                "path": "ActiveDocument.Name"
+              }
+            },
+            "predicate": {
+              "kind": "equals",
+              "expected": {
+                "kind": "string",
+                "value": "fixture.ai"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "v1/request-unknown-field",
+      "schema": "request.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-v1-bad-field",
+        "operation": "core.runtime.health",
+        "input": null,
+        "bogus": true
+      }
+    },
+    {
+      "name": "v1/request-short-lease",
+      "schema": "request.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "req-v1-short-lease",
+        "operation": "com.set",
+        "input": {},
+        "policy": {
+          "leaseId": "short"
+        }
+      }
+    },
+    {
+      "name": "v1/result-success",
+      "schema": "result.schema.json",
+      "valid": true,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "result-v1-ok",
+        "operation": "core.runtime.health",
+        "ok": true,
+        "status": "completed",
+        "targetState": "known",
+        "result": {
+          "kind": "object",
+          "value": {
+            "healthy": true
+          }
+        },
+        "timing": {
+          "totalMs": 1.25
+        }
+      }
+    },
+    {
+      "name": "v1/result-invalid-target-state",
+      "schema": "result.schema.json",
+      "valid": false,
+      "instance": {
+        "protocolVersion": 1,
+        "id": "result-v1-bad-state",
+        "operation": "core.runtime.health",
+        "ok": true,
+        "status": "completed",
+        "targetState": "unknown"
+      }
+    },
+    {
+      "name": "v1/value-null",
+      "schema": "value.schema.json",
+      "valid": true,
+      "instance": {
+        "kind": "null"
+      }
+    },
+    {
+      "name": "v1/value-null-cannot-carry-value",
+      "schema": "value.schema.json",
+      "valid": false,
+      "instance": {
+        "kind": "null",
+        "value": null
+      }
+    },
+    {
+      "name": "v1/value-string",
+      "schema": "value.schema.json",
+      "valid": true,
+      "instance": {
+        "kind": "string",
+        "value": "hello"
+      }
+    },
+    {
+      "name": "v1/value-string-requires-string",
+      "schema": "value.schema.json",
+      "valid": false,
+      "instance": {
+        "kind": "string",
+        "value": 42
+      }
+    }
+  ]
+}

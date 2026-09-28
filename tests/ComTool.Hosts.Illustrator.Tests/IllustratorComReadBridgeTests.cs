@@ -37,10 +37,41 @@ public sealed class IllustratorComReadBridgeTests
     {
         var root = FakeApplication.Create();
 
-        Assert.Throws<ArgumentException>(
+        var error = Assert.Throws<ComAutomationPathException>(
             () => IllustratorComReadBridge.Get(
                 root,
                 "Documents[-1].Name"));
+
+        Assert.Equal("invalid_com_path", error.Kind);
+    }
+
+    [Fact]
+    public void GetRejectsPathBeyondSharedRuntimeBound()
+    {
+        var root = FakeApplication.Create();
+        var path = string.Join(
+            ".",
+            Enumerable.Repeat(
+                "Documents",
+                ComAutomationPath.MaxPathSegments + 1));
+
+        var error = Assert.Throws<ComAutomationPathException>(
+            () => IllustratorComReadBridge.Get(root, path));
+
+        Assert.Equal("com_path_too_deep", error.Kind);
+    }
+
+    [Fact]
+    public void GetRejectsIndexThatCannotBeTranslatedToOneBasedComIndex()
+    {
+        var root = FakeApplication.Create();
+
+        var error = Assert.Throws<ComAutomationPathException>(
+            () => IllustratorComReadBridge.Get(
+                root,
+                $"Documents[{int.MaxValue}].Name"));
+
+        Assert.Equal("invalid_com_path", error.Kind);
     }
 
     [Fact]

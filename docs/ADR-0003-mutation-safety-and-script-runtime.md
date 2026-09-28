@@ -17,24 +17,26 @@ The legacy COM Tool also proved that ExtendScript needs a reliable JSON layer. V
 
 Operation metadata, not caller optimism, owns the safety floor.
 
-`script.eval` uses `DeclaredOrUnknown` mutation resolution:
+`script.eval` and `script.runFile` use `DeclaredOrUnknown` mutation resolution:
 
 - omitted `effects` ⇒ `unknown`;
 - recognized write classes may be declared;
-- arbitrary source **cannot** declare `read_only`.
+- arbitrary source/file execution **cannot** declare `read_only`.
+
+`script.runFile` additionally requires an expected SHA-256 for the exact `.jsx` / `.jsxbin` bytes; the adapter re-hashes immediately before execution so file routing cannot silently execute different content.
 
 Both supervisor and worker independently derive and verify the effective mutation class.
 
 ### 2. Mutating operations require a target lease
 
-`script.eval` requires an explicit lease.
+`script.eval` and `script.runFile` require an explicit lease.
 
 Lease ownership has two layers:
 
 1. a cryptographically random runtime lease token with bounded TTL;
 2. an OS-held per-target lock keyed by the strong target ID.
 
-The OS lock is process-global. Two runtime processes cannot simultaneously own mutation leases for the same Adobe target generation. Process death releases the kernel handle automatically; TTL expiry releases it through the supervisor expiry timer.
+The OS lock is process-global. Two runtime processes cannot simultaneously own mutation leases for the same Adobe target generation. Process death releases the kernel handle automatically; TTL expiry releases it through the supervisor expiry timer. The supported lease ceiling is long enough to cover the maximum worker watchdog plus a bounded recovery grace window.
 
 Read-only operations do not require global ownership unless another caller already holds a lease.
 
@@ -97,21 +99,40 @@ state, and only when the entire batch is verified and passing. If the original
 request had no postconditions, an operator must use the separate explicit
 `core.target.incident.resolve` decision path.
 
-### 7. ESON is the canonical structured ExtendScript codec
+### 7. Worker watchdogs are caller-controlled, but timeout is not cancellation proof
+
+Host execution uses `policy.workerWatchdogMs`. The persistent RuntimeSupervisor forwards that value to the ordinary Supervisor → Worker broker path; it does not replace it with the broker's historical 60-second default. The supported range is 100 ms through 3,600,000 ms.
+
+A watchdog firing after dispatch means only that the worker did not return a correlated response in time. ExtendScript may already be executing inside Illustrator, and killing the COM worker does not prove that host execution stopped. Therefore:
+
+- a potentially mutating timed-out dispatch remains `ambiguous` / `reconciliation_required`;
+- the runtime never silently retries that script;
+- caller tooling must preserve the durable request ID and ambiguity state;
+- runner-owned leases are sized to cover the watchdog plus recovery grace.
+
+### 8. Break-glass host-generation termination is out-of-band
+
+`core.target.host.terminate` exists for the pathological case where code continues inside the Adobe host after the worker watchdog fires. It is a runtime control operation, not another COM implementation. It intentionally performs no fresh host discovery and does not wait on the ordinary target-operation/worker-command lane, because those are precisely the lanes that may be wedged.
+
+Termination requires the same active target lease and explicit confirmation of the already-known process ID plus process start time. The runtime revalidates the OS process generation immediately before `Kill`; PID reuse or a mismatched generation fails closed. The same lease is renewed for the bounded termination window before the break-glass action begins, preserving cross-process ownership during recovery. A prior mutation incident remains unresolved; killing the host is not evidence about whether the script mutated state before termination.
+
+Out-of-band means transport admission too, not only supervisor locking. NDJSON dispatch is bounded-concurrent and responses are correlated by request ID rather than submission order. `ComTool.Cli stdio` uses a pool of intentionally single-flight runtime-pipe clients: an idle connection is reused for sequential work, while an overlapping recovery request obtains another runtime-pipe connection. `RuntimePipeServer` already services independent connections concurrently. This prevents a blocked execution request from monopolizing the only path by which the caller could issue `core.target.host.terminate`.
+
+### 9. ESON is the canonical structured ExtendScript codec
 
 The Illustrator adapter embeds the canonical sibling ESON runtime build as a resource and verifies its SHA-256 at build time.
 
 Current pinned runtime SHA-256:
 
 ```text
-31ee6046390589fabcc8a574c0b1fad50684912ae1d04682f026f95a9e7750fc
+51ce10b9a08fae7cfba495e264c4a87607c1a104c8b18b44f1b77e863fc24558
 ```
 
 At runtime, V2 installs ESON once into a COM Tool-owned namespace on `$.global` and fingerprints the installed build. `script.eval` uses ESON for structured arguments and result/error envelopes.
 
 The high-frequency eval path deliberately uses the slim runtime build. ESPACK/native ESON acceleration is reserved for operations whose measured workload is parse-heavy enough to justify the additional cold-start/native state.
 
-### 8. Controlled Illustrator mutation and document lifecycle
+### 10. Controlled Illustrator mutation and document lifecycle
 
 The first non-script mutation is `illustrator.artboard.setName`. It is a fixed
 runtime-catalog `idempotent_write`, requires the target lease, and accepts only

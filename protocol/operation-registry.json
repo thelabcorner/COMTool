@@ -1,298 +1,628 @@
 {
-  "schemaVersion": 2,
-  "protocolVersion": 1,
-  "authority": "ComTool.Runtime.BuiltInOperations.Catalog",
-  "generatedPolicy": "checked_in_snapshot_tested_against_runtime_catalog",
-  "operations": [
-    {
-      "name": "core.runtime.health",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": false,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.incidents.list",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": false,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.targets.list",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": false,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.capabilities",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.reconcile",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.mutation.reconcile",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.incident.resolve",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.workflow.submit",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": false,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.workflow.get",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": false,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.workflow.cancel",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": false,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.workflow.resume",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": false,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.lease.acquire",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.lease.renew",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.lease.release",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "runtime",
-      "host": null,
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.status",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "core.target.snapshot",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "illustrator.document.read",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "illustrator.artboard.read",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "illustrator.layer.read",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "com.get",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "com.call.read",
-      "version": "1",
-      "mutationClass": "read_only",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": null,
-      "requiresLease": false,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "script.eval",
-      "version": "1",
-      "mutationClass": "unknown",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": true,
-      "mutationResolution": "declared_or_unknown"
-    },
-    {
-      "name": "script.runFile",
-      "version": "1",
-      "mutationClass": "unknown",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": true,
-      "mutationResolution": "declared_or_unknown"
-    },
-    {
-      "name": "illustrator.artboard.setName",
-      "version": "1",
-      "mutationClass": "idempotent_write",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "illustrator.document.create",
-      "version": "1",
-      "mutationClass": "document_lifecycle",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "illustrator.document.open",
-      "version": "1",
-      "mutationClass": "document_lifecycle",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "illustrator.document.save",
-      "version": "1",
-      "mutationClass": "document_lifecycle",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "illustrator.document.saveAs",
-      "version": "1",
-      "mutationClass": "document_lifecycle",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    },
-    {
-      "name": "illustrator.document.close",
-      "version": "1",
-      "mutationClass": "document_lifecycle",
-      "requiresTarget": true,
-      "executionScope": "host",
-      "host": "illustrator",
-      "requiresLease": true,
-      "mutationResolution": "fixed"
-    }
-  ]
+    "schemaVersion":  2,
+    "protocolVersion":  1,
+    "authority":  "ComTool.Runtime.BuiltInOperations.Catalog",
+    "generatedPolicy":  "checked_in_snapshot_tested_against_runtime_catalog",
+    "operations":  [
+                       {
+                           "name":  "core.runtime.health",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.operations.list",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.operation.describe",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.incidents.list",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.incident.resolve",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.targets.list",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.attach",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.launch",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.capabilities",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.reconcile",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.mutation.reconcile",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.incident.resolve",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.workflow.submit",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.workflow.get",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.workflow.cancel",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.workflow.resume",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.lease.acquire",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.lease.renew",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.lease.release",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.host.terminate",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.status",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.target.snapshot",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.document.read",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.artboard.read",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.layer.read",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.layer.setName",
+                           "version":  "1",
+                           "mutationClass":  "idempotent_write",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.layer.setVisible",
+                           "version":  "1",
+                           "mutationClass":  "idempotent_write",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.layer.setLocked",
+                           "version":  "1",
+                           "mutationClass":  "idempotent_write",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.layer.setOpacity",
+                           "version":  "1",
+                           "mutationClass":  "idempotent_write",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.artboard.setRect",
+                           "version":  "1",
+                           "mutationClass":  "idempotent_write",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "com.get",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "com.call.read",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "plugin.message",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "debug.session.open",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "debug.session.status",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "debug.session.command",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "debug.session.close",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "script.eval",
+                           "version":  "1",
+                           "mutationClass":  "unknown",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "declared_or_unknown"
+                       },
+                       {
+                           "name":  "script.runFile",
+                           "version":  "1",
+                           "mutationClass":  "unknown",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "declared_or_unknown"
+                       },
+                       {
+                           "name":  "illustrator.artboard.setName",
+                           "version":  "1",
+                           "mutationClass":  "idempotent_write",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.document.create",
+                           "version":  "1",
+                           "mutationClass":  "document_lifecycle",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.document.open",
+                           "version":  "1",
+                           "mutationClass":  "document_lifecycle",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.document.save",
+                           "version":  "1",
+                           "mutationClass":  "document_lifecycle",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.document.saveAs",
+                           "version":  "1",
+                           "mutationClass":  "document_lifecycle",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.document.close",
+                           "version":  "1",
+                           "mutationClass":  "document_lifecycle",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "script.validate",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "watch.condition",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "com.set",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "com.call",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "plugin.debug.diagnostics",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "plugin.debug.control",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.action.run",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "illustrator.menu.execute",
+                           "version":  "1",
+                           "mutationClass":  "external_side_effect",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  true,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "knowledge.describe",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "knowledge.search",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "knowledge.symbol",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "knowledge.enum",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.operation.examples",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.artifact.describe",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "core.artifact.read",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "knowledge.paths",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
+                           "name":  "script.codec.status",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  true,
+                           "executionScope":  "host",
+                           "host":  "illustrator",
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       }
+                   ]
 }

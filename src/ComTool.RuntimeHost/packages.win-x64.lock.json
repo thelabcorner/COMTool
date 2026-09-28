@@ -15,6 +15,14 @@
           "ComTool.Protocol": "[1.0.0, )"
         }
       },
+      "comtool.knowledge": {
+        "type": "Project",
+        "dependencies": {
+          "ComTool.Hosts.Abstractions": "[1.0.0, )",
+          "ComTool.Protocol": "[1.0.0, )",
+          "ComTool.Runtime": "[1.0.0, )"
+        }
+      },
       "comtool.protocol": {
         "type": "Project"
       },
@@ -37,6 +45,7 @@
         "dependencies": {
           "ComTool.Broker.Protocol": "[1.0.0, )",
           "ComTool.Hosts.Abstractions": "[1.0.0, )",
+          "ComTool.Knowledge": "[1.0.0, )",
           "ComTool.Protocol": "[1.0.0, )",
           "ComTool.Runtime": "[1.0.0, )",
           "ComTool.Transport.Pipe": "[1.0.0, )"

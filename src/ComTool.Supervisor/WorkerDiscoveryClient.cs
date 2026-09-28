@@ -58,6 +58,10 @@ public static class WorkerDiscoveryClient
             startInfo.ArgumentList.Add("--host");
             startInfo.ArgumentList.Add(host);
             startInfo.ArgumentList.Add("--discover");
+            startInfo.ArgumentList.Add("--max-frame-bytes");
+            startInfo.ArgumentList.Add(
+                options.MaxFrameBytes.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
             startInfo.Environment[TokenEnvironmentVariable] = token;
 
             process = Process.Start(startInfo)

@@ -15,6 +15,24 @@ public sealed class OperationCatalogIntegrationTests
             CoreOperations.CreateCatalog());
     }
 
+    [Theory]
+    [InlineData("core.operations.list")]
+    [InlineData("core.operation.describe")]
+    public void RuntimeOperationIntrospectionIsReadOnlyAndTargetIndependent(
+        string name)
+    {
+        var definition = BuiltInOperations.Catalog.GetRequired(name);
+
+        Assert.Equal(MutationClass.ReadOnly, definition.MutationClass);
+        Assert.False(definition.RequiresTarget);
+        Assert.Equal(OperationExecutionScope.Runtime, definition.Scope);
+        Assert.False(definition.RequiresLease);
+        Assert.Null(definition.Host);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
     [Fact]
     public void MutationReconcileIsLeaseGatedRuntimeReadOnlyOperation()
     {
@@ -65,6 +83,71 @@ public sealed class OperationCatalogIntegrationTests
                 MutationResolutionMode.Fixed,
                 definition.MutationResolution);
         }
+    }
+
+    [Fact]
+    public void PluginMessageIsLeaseGatedFixedExternalSideEffect()
+    {
+        var definition = BuiltInOperations.Catalog.GetRequired(
+            "plugin.message");
+
+        Assert.Equal(
+            MutationClass.ExternalSideEffect,
+            definition.MutationClass);
+        Assert.True(definition.RequiresTarget);
+        Assert.Equal(
+            OperationExecutionScope.Host,
+            definition.Scope);
+        Assert.Equal("illustrator", definition.Host);
+        Assert.True(definition.RequiresLease);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
+    [Theory]
+    [InlineData("debug.session.open")]
+    [InlineData("debug.session.command")]
+    [InlineData("debug.session.close")]
+    public void DebuggerSessionOperationsAreLeaseGatedFixedExternalSideEffects(
+        string name)
+    {
+        var definition =
+            BuiltInOperations.Catalog.GetRequired(name);
+
+        Assert.Equal(
+            MutationClass.ExternalSideEffect,
+            definition.MutationClass);
+        Assert.True(definition.RequiresTarget);
+        Assert.Equal(
+            OperationExecutionScope.Host,
+            definition.Scope);
+        Assert.Equal(
+            "illustrator",
+            definition.Host);
+        Assert.True(definition.RequiresLease);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
+    [Fact]
+    public void DebuggerStatusIsHostScopedReadOnlyAndNeedsNoLease()
+    {
+        // Observing whether the worker owns a usable debugger session is not
+        // debugger use, so it must not demand a lease, must not be classified
+        // as a side effect, and must never be replayed as a mutation.
+        var definition = BuiltInOperations.Catalog.GetRequired(
+            "debug.session.status");
+
+        Assert.Equal(MutationClass.ReadOnly, definition.MutationClass);
+        Assert.True(definition.RequiresTarget);
+        Assert.Equal(OperationExecutionScope.Host, definition.Scope);
+        Assert.Equal("illustrator", definition.Host);
+        Assert.False(definition.RequiresLease);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
     }
 
     [Fact]
@@ -153,6 +236,184 @@ public sealed class OperationCatalogIntegrationTests
             Assert.True(definition.RequiresTarget);
             Assert.True(definition.RequiresLease);
         }
+    }
+
+    [Fact]
+    public void NewHostParityOperationsUseFixedExplicitSafetyClasses()
+    {
+        var expected = new Dictionary<string, (MutationClass Mutation, bool Lease)>
+        {
+            ["com.set"] = (MutationClass.ExternalSideEffect, true),
+            ["com.call"] = (MutationClass.ExternalSideEffect, true),
+            ["illustrator.action.run"] =
+                (MutationClass.ExternalSideEffect, true),
+            ["illustrator.menu.execute"] =
+                (MutationClass.ExternalSideEffect, true),
+            ["plugin.debug.diagnostics"] =
+                (MutationClass.ReadOnly, false),
+            ["script.codec.status"] =
+                (MutationClass.ReadOnly, false),
+            ["plugin.debug.control"] =
+                (MutationClass.ExternalSideEffect, true)
+        };
+
+        foreach (var (name, policy) in expected)
+        {
+            var definition = BuiltInOperations.Catalog.GetRequired(name);
+
+            Assert.Equal(policy.Mutation, definition.MutationClass);
+            Assert.True(definition.RequiresTarget);
+            Assert.Equal(OperationExecutionScope.Host, definition.Scope);
+            Assert.Equal("illustrator", definition.Host);
+            Assert.Equal(policy.Lease, definition.RequiresLease);
+            Assert.Equal(
+                MutationResolutionMode.Fixed,
+                definition.MutationResolution);
+        }
+    }
+
+    [Theory]
+    [InlineData("illustrator.layer.setName")]
+    [InlineData("illustrator.layer.setVisible")]
+    [InlineData("illustrator.layer.setLocked")]
+    [InlineData("illustrator.layer.setOpacity")]
+    [InlineData("illustrator.artboard.setRect")]
+    public void TypedIllustratorPropertyMutationsAreFixedLeaseOwnedIdempotentWrites(
+        string name)
+    {
+        var definition = BuiltInOperations.Catalog.GetRequired(name);
+
+        Assert.Equal(
+            MutationClass.IdempotentWrite,
+            definition.MutationClass);
+        Assert.True(definition.RequiresTarget);
+        Assert.Equal(
+            OperationExecutionScope.Host,
+            definition.Scope);
+        Assert.Equal("illustrator", definition.Host);
+        Assert.True(definition.RequiresLease);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
+    [Fact]
+    public void TargetAttachIsExplicitTargetRuntimeReadWithoutLease()
+    {
+        var definition = BuiltInOperations.Catalog.GetRequired(
+            "core.target.attach");
+
+        Assert.Equal(MutationClass.ReadOnly, definition.MutationClass);
+        Assert.True(definition.RequiresTarget);
+        Assert.Equal(
+            OperationExecutionScope.Runtime,
+            definition.Scope);
+        Assert.False(definition.RequiresLease);
+        Assert.Null(definition.Host);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
+    [Fact]
+    public void TargetLaunchIsTargetFreeRuntimeExternalSideEffect()
+    {
+        var definition = BuiltInOperations.Catalog.GetRequired(
+            "core.target.launch");
+
+        Assert.Equal(
+            MutationClass.ExternalSideEffect,
+            definition.MutationClass);
+        Assert.False(definition.RequiresTarget);
+        Assert.Equal(
+            OperationExecutionScope.Runtime,
+            definition.Scope);
+        Assert.False(definition.RequiresLease);
+        Assert.Null(definition.Host);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
+    [Theory]
+    [InlineData("core.artifact.describe")]
+    [InlineData("core.artifact.read")]
+    public void ArtifactRetrievalOperationsAreTargetIndependentRuntimeReads(
+        string name)
+    {
+        var definition = BuiltInOperations.Catalog.GetRequired(name);
+
+        Assert.Equal(MutationClass.ReadOnly, definition.MutationClass);
+        Assert.False(definition.RequiresTarget);
+        Assert.Equal(OperationExecutionScope.Runtime, definition.Scope);
+        Assert.False(definition.RequiresLease);
+        Assert.Null(definition.Host);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
+    [Fact]
+    public void OperationExamplesIsTargetIndependentRuntimeRead()
+    {
+        var definition = BuiltInOperations.Catalog.GetRequired(
+            "core.operation.examples");
+
+        Assert.Equal(MutationClass.ReadOnly, definition.MutationClass);
+        Assert.False(definition.RequiresTarget);
+        Assert.Equal(OperationExecutionScope.Runtime, definition.Scope);
+        Assert.False(definition.RequiresLease);
+        Assert.Null(definition.Host);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
+    [Theory]
+    [InlineData("knowledge.describe")]
+    [InlineData("knowledge.search")]
+    [InlineData("knowledge.symbol")]
+    [InlineData("knowledge.enum")]
+    [InlineData("knowledge.paths")]
+    public void KnowledgeOperationsAreTargetIndependentRuntimeReads(
+        string name)
+    {
+        var definition = BuiltInOperations.Catalog.GetRequired(name);
+
+        Assert.Equal(MutationClass.ReadOnly, definition.MutationClass);
+        Assert.False(definition.RequiresTarget);
+        Assert.Equal(OperationExecutionScope.Runtime, definition.Scope);
+        Assert.False(definition.RequiresLease);
+        Assert.Null(definition.Host);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            definition.MutationResolution);
+    }
+
+    [Fact]
+    public void ScriptValidateAndWatchConditionStayRuntimeOwned()
+    {
+        var validate =
+            BuiltInOperations.Catalog.GetRequired("script.validate");
+        Assert.Equal(MutationClass.ReadOnly, validate.MutationClass);
+        Assert.False(validate.RequiresTarget);
+        Assert.Equal(OperationExecutionScope.Runtime, validate.Scope);
+        Assert.False(validate.RequiresLease);
+        Assert.Null(validate.Host);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            validate.MutationResolution);
+
+        var watch =
+            BuiltInOperations.Catalog.GetRequired("watch.condition");
+        Assert.Equal(MutationClass.ReadOnly, watch.MutationClass);
+        Assert.True(watch.RequiresTarget);
+        Assert.Equal(OperationExecutionScope.Runtime, watch.Scope);
+        Assert.False(watch.RequiresLease);
+        Assert.Null(watch.Host);
+        Assert.Equal(
+            MutationResolutionMode.Fixed,
+            watch.MutationResolution);
     }
 
     [Fact]

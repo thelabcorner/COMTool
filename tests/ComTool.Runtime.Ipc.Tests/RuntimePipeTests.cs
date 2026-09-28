@@ -114,6 +114,95 @@ public sealed class RuntimePipeTests
     }
 
     [Fact]
+    public async Task ClientPoolLetsControlRequestBypassBlockedConnection()
+    {
+        var pipeName = UniquePipe();
+        using var serverCts =
+            new CancellationTokenSource();
+
+        var slowEntered =
+            new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSlow =
+            new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var server = new RuntimePipeServer(
+            async (request, cancellationToken) =>
+            {
+                if (string.Equals(
+                        request.Id,
+                        "slow",
+                        StringComparison.Ordinal))
+                {
+                    slowEntered.TrySetResult();
+                    await releaseSlow.Task
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                return Success(
+                    request,
+                    ProtocolValue.FromString(request.Id));
+            },
+            pipeName);
+
+        var serverTask =
+            server.RunAsync(serverCts.Token);
+
+        await using var pool =
+            await RuntimePipeClientPool.ConnectAsync(
+                pipeName,
+                maxIdleClients: 2);
+
+        var slowTask =
+            pool.ExecuteAsync(
+                Request(
+                    "slow",
+                    "script.runFile"));
+
+        try
+        {
+            await slowEntered.Task
+                .WaitAsync(TimeSpan.FromSeconds(2));
+
+            var controlTask =
+                pool.ExecuteAsync(
+                    Request(
+                        "control",
+                        "core.target.host.terminate"));
+
+            var control =
+                await controlTask
+                    .WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.True(control.Ok);
+            Assert.Equal(
+                "control",
+                control.Id);
+            Assert.False(
+                slowTask.IsCompleted);
+
+            releaseSlow.TrySetResult();
+
+            var slow =
+                await slowTask
+                    .WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.True(slow.Ok);
+            Assert.Equal(
+                "slow",
+                slow.Id);
+        }
+        finally
+        {
+            releaseSlow.TrySetResult();
+            serverCts.Cancel();
+            await serverTask;
+        }
+    }
+
+    [Fact]
     public async Task MalformedClientIsDroppedWithoutPoisoningServer()
     {
         var pipeName = UniquePipe();

@@ -4,10 +4,8 @@
     <ProjectReference Include="..\ComTool.Protocol\ComTool.Protocol.csproj" />
     <ProjectReference Include="..\ComTool.Runtime\ComTool.Runtime.csproj" />
     <ProjectReference Include="..\ComTool.Runtime.Ipc\ComTool.Runtime.Ipc.csproj" />
-    <ProjectReference Include="..\ComTool.Supervisor\ComTool.Supervisor.csproj" />
     <ProjectReference Include="..\ComTool.Transport.Stdio\ComTool.Transport.Stdio.csproj" />
     <ProjectReference Include="..\ComTool.Transport.Pipe\ComTool.Transport.Pipe.csproj" />
-    <ProjectReference Include="..\ComTool.Hosts.Illustrator\ComTool.Hosts.Illustrator.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -44,11 +44,11 @@ The goal is not bug-for-bug compatibility. Each legacy behavior is classified as
 | `com_lookup.py search` | targeted symbol discovery avoids context bloat | separate script/tool surface | `inspect.search` | read_only | Phase 6 |
 | `com_lookup.py signature` | exact parameter/enum lookup | interface naming quirks | `inspect.symbol` | read_only | Phase 6 |
 | `--examples` | discoverable copy-paste recipes | documentation scraping tied CLI/docs together | self-describing operation examples | read_only | Phase 6 |
-| `debug attach` | real ExtendScript debugger transport | one process per invocation undermined session continuity | debugger session handle in worker/runtime | debugging | Wave D |
-| debug breakpoint APIs | persistent host breakpoint state | independent debugger clients can collide | explicit debugger lease/session | debugging | Wave D |
-| debug eval/step | break/inspect/continue automation | REPL semantics differ from COM eval | distinct debugger facet, never fake generic eval | debugging | Wave D |
-| ESD Node bridge | proven transport to Adobe debugger core | Node dependency hidden inside Python command | retain initially behind adapter boundary | debugging | Wave D |
-| `SendScriptMessage` | direct native plug-in messaging | plugin contracts were bespoke | `plugin.message` / generic RPC capability | plugin_side_effect | Wave E |
+| `debug attach` | real ExtendScript debugger transport | one process per invocation undermined session continuity | `debug.session.open` — worker-owned, generation-scoped session handle over the Adobe ExtendScript Debugger (`estk3`) | debugging | Wave D — implemented/live |
+| debug breakpoint APIs | persistent host breakpoint state | independent debugger clients can collide | `debug.session.command` `set-breakpoints` / `get-breakpoints`, bound to the worker's own lease-bound session so independent clients cannot collide | debugging | Wave D — implemented/live |
+| debug eval/step | break/inspect/continue automation | REPL semantics differ from COM eval | `debug.session.command` `eval` / `get-break` / `get-frame` / `set-frame` / `get-properties` / `break` / `continue` / `halt` / `stepover` / `stepinto` / `stepout`, a distinct debugger facet that is never faked as generic `script.eval` | debugging | Wave D — implemented/live |
+| ESD Node bridge | proven transport to Adobe debugger core | Node dependency hidden inside Python command | retained behind the host adapter: an embedded, SHA-pinned bridge asset plus the exact native addon bytes, spawned only by the target worker | debugging | Wave D — implemented/live |
+| `SendScriptMessage` | direct native plug-in messaging | plugin contracts were bespoke | `plugin.message` generic bounded RPC; target generation + lease + no-replay + provenance remain runtime-owned | external_side_effect | Wave E — generic bridge implemented |
 | AIPDebug integration | reusable native plugin diagnostics | must not mix debug/product endpoint semantics | dedicated plugin debug facet | debugging | Wave E |
 | VectorIPC | efficient native/helper transport | should not be mandatory for basic automation | optional native transport facet | transport | Wave E |
 | launch/attach default | convenient auto-connect | docs/default semantics drifted | explicit target lifecycle policy | lifecycle | Runtime |

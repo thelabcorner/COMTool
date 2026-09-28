@@ -1,10 +1,10 @@
 # Phase 0 Gate Ledger
 
-**Rule:** no gate is marked PASS without captured executable evidence. Architectural hypotheses remain reversible until Phase 0 closes.
+**Status:** CLOSED — all Phase 0 gates have executable evidence as of 2026-09-27.\n\n**Rule:** no gate is marked PASS without captured executable evidence. Architectural hypotheses remain reversible until Phase 0 closes.
 
 | Gate | State | Purpose | Evidence |
 |---|---|---|---|
-| 0A | PARTIAL PASS | Prove .NET/COM/STA viability against live Illustrator | STA attach/read/JSX/direct-DOM disposable mutation/explicit close all passed; restart/reconnect still pending |
+| 0A | PASS | Prove .NET/COM/STA viability against live Illustrator | STA attach/read/JSX/direct-DOM disposable mutation/explicit close passed; live restart/reconnect also passed with the same persistent RuntimeHost discovering a new strong Illustrator generation (`evidence/gate-0a-restart-reconnect-2026-09-27.json`) |
 | 0B | PASS | Prove distributable self-contained executable | win-x64 self-contained single-file builds passed; baseline 70.12 MiB, median startup 63.53 ms over 20 runs; ReadyToRun was larger/slower |
 | 0C | PASS | Prove supervisor/worker/named-pipe topology | Framed authenticated pipe; STA worker; 1,000 concurrent-caller requests serialized exactly once; restart identity; watchdog → reconciliation_required → explicit reconcile all passed |
 | 0D | PASS | Prove canonical JSON/stdio transport | 11 NDJSON fixtures passed including tagged type fidelity, malformed-line isolation, strict fields, version/operation errors |

@@ -290,6 +290,40 @@ public sealed class MutationLedgerTests : IDisposable
     }
 
     [Fact]
+    public void CurrentWorkerCertifiedNotStartedClearsPreparedMutation()
+    {
+        var ledger = new MutationLedger(_root);
+        var target = Target();
+        var request = Request(
+            "req-certified-not-started",
+            """{"value":42}""");
+
+        var begin = ledger.Begin(
+            target,
+            request,
+            MutationClass.ExternalSideEffect);
+
+        ledger.Finalize(
+            begin.Record,
+            NotStarted(request),
+            executionWasDispatched: true,
+            notStartedCertifiedByCurrentWorker:
+                true);
+
+        Assert.Null(
+            ledger.GetUnresolvedTarget(
+                target.Identity.TargetId));
+
+        var retry = ledger.Begin(
+            target,
+            request,
+            MutationClass.ExternalSideEffect);
+        Assert.Equal(
+            MutationLedgerBeginDisposition.Proceed,
+            retry.Disposition);
+    }
+
+    [Fact]
     public void FailedResultWithoutErrorFailsClosedAsAmbiguous()
     {
         var ledger = new MutationLedger(_root);
@@ -922,6 +956,135 @@ public sealed class MutationLedgerTests : IDisposable
             Directory.GetFiles(
                 Path.Combine(_root, "active"),
                 "*.json"));
+    }
+
+    [Fact]
+    public void OfflineResolutionRejectsStaleIncidentTimestamp()
+    {
+        var ledger = new MutationLedger(_root);
+        var target = Target();
+        var request = Request(
+            "offline-resolution-stale",
+            """{"kind":"code","source":"danger();"}""");
+        var begin = ledger.Begin(
+            target,
+            request,
+            MutationClass.Unknown);
+
+        var error = Assert.Throws<MutationLedgerException>(
+            () => ledger.ResolveIncident(
+                target.Identity.TargetId,
+                request.Id,
+                changed: false,
+                rationale: "stale inspection",
+                evidence: null,
+                expectedUpdatedAt:
+                    begin.Record.UpdatedAt.AddTicks(-1)));
+
+        Assert.Equal(
+            "mutation_incident_revision_conflict",
+            error.Kind);
+        Assert.NotNull(
+            ledger.GetUnresolvedTarget(
+                target.Identity.TargetId));
+    }
+
+    [Fact]
+    public void TypedPropertyMutationLedgerIsGenerationBoundAndReplaySafe()
+    {
+        var ledger = new MutationLedger(_root);
+        var target = Target();
+        var definition = BuiltInOperations.Catalog.GetRequired(
+            "illustrator.layer.setOpacity");
+        using var input = JsonDocument.Parse(
+            """
+            {
+              "document":{"index":0},
+              "layer":{"name":"Layer B"},
+              "value":42.5
+            }
+            """);
+        var request = new OperationRequest
+        {
+            ProtocolVersion = ProtocolVersion.Current,
+            Id = "typed-opacity-generation-bound",
+            Target = target.Target,
+            Operation = definition.Name,
+            Input = input.RootElement.Clone()
+        };
+
+        Assert.Equal(
+            MutationClass.IdempotentWrite,
+            definition.MutationClass);
+        Assert.True(definition.RequiresLease);
+
+        var begin = ledger.Begin(
+            target,
+            request,
+            definition.MutationClass);
+        Assert.Equal(
+            target.Identity.TargetId,
+            begin.Record.TargetId);
+        Assert.Equal(
+            target.Identity.ProcessId,
+            begin.Record.ProcessId);
+        Assert.Equal(
+            target.Identity.ProcessStartedAt,
+            begin.Record.ProcessStartedAt);
+        Assert.Equal(
+            MutationClass.IdempotentWrite,
+            begin.Record.MutationClass);
+
+        ledger.Finalize(
+            begin.Record,
+            Success(
+                request,
+                ProtocolValue.FromString("applied")));
+
+        var replay = ledger.Begin(
+            target,
+            request,
+            definition.MutationClass);
+        Assert.Equal(
+            MutationLedgerBeginDisposition.ReplayCompleted,
+            replay.Disposition);
+        Assert.Equal(
+            "applied",
+            replay.StoredResult?.Result?.Value?.GetString());
+
+        var nextIdentity = target.Identity with
+        {
+            ProcessStartedAt =
+                target.Identity.ProcessStartedAt.AddSeconds(1)
+        };
+        var nextTarget = new HostTargetDescriptor
+        {
+            Identity = nextIdentity,
+            Target = new TargetRef(
+                nextIdentity.Host,
+                nextIdentity.TargetId,
+                Generation: 0),
+            Capabilities = Array.Empty<CapabilityDescriptor>(),
+            Running = true
+        };
+        var nextRequest = request with
+        {
+            Target = nextTarget.Target
+        };
+
+        Assert.NotEqual(
+            target.Identity.TargetId,
+            nextIdentity.TargetId);
+        var nextBegin = ledger.Begin(
+            nextTarget,
+            nextRequest,
+            definition.MutationClass);
+        Assert.Equal(
+            MutationLedgerBeginDisposition.Proceed,
+            nextBegin.Disposition);
+        Assert.Equal(
+            nextIdentity.TargetId,
+            nextBegin.Record.TargetId);
     }
 
     public void Dispose()

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using ComTool.Broker.Protocol;
 using ComTool.Hosts.Abstractions;
@@ -13,11 +14,17 @@ namespace ComTool.Supervisor;
 /// </summary>
 public sealed class TargetSupervisor : IAsyncDisposable
 {
+    public const int DefaultHostTerminationWaitMs = 10_000;
+    public const int MinHostTerminationWaitMs = 100;
+    public const int MaxHostTerminationWaitMs = 60_000;
+
     private readonly HostTargetDescriptor _target;
     private readonly WorkerBrokerOptions _options;
     private readonly TargetStateMachine _state;
     private readonly MutationLedger? _mutationLedger;
     private readonly string? _leaseLockDirectory;
+    private readonly Func<OperationResult, MutationClass, OperationResult>?
+        _resultMaterializer;
     private readonly TargetLeaseManager _leases = new();
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
@@ -35,7 +42,9 @@ public sealed class TargetSupervisor : IAsyncDisposable
             target,
             options,
             stateMachine,
-            mutationLedger: null)
+            mutationLedger: null,
+            leaseLockDirectory: null,
+            resultMaterializer: null)
     {
     }
 
@@ -44,7 +53,9 @@ public sealed class TargetSupervisor : IAsyncDisposable
         WorkerBrokerOptions options,
         TargetStateMachine? stateMachine,
         MutationLedger? mutationLedger,
-        string? leaseLockDirectory = null)
+        string? leaseLockDirectory = null,
+        Func<OperationResult, MutationClass, OperationResult>?
+            resultMaterializer = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(options);
@@ -54,6 +65,7 @@ public sealed class TargetSupervisor : IAsyncDisposable
         _state = stateMachine ?? new TargetStateMachine();
         _mutationLedger = mutationLedger;
         _leaseLockDirectory = leaseLockDirectory;
+        _resultMaterializer = resultMaterializer;
 
         var persisted = _mutationLedger?.GetUnresolvedTarget(
             target.Identity.TargetId);
@@ -537,7 +549,16 @@ public sealed class TargetSupervisor : IAsyncDisposable
                             begin.StoredResult);
 
                     if (beginResult is not null)
-                        return beginResult;
+                    {
+                        return _resultMaterializer is not null &&
+                               begin.Disposition ==
+                                   MutationLedgerBeginDisposition.ReplayCompleted &&
+                               beginResult.Ok
+                            ? _resultMaterializer(
+                                beginResult,
+                                mutationClass)
+                            : beginResult;
+                    }
 
                     prepared = begin.Record;
                 }
@@ -572,14 +593,21 @@ public sealed class TargetSupervisor : IAsyncDisposable
                         };
 
                 OperationResult result;
+                var notStartedCertified =
+                    false;
                 try
                 {
-                    result = await worker
-                        .ExecuteAsync(
+                    var workerOutcome =
+                        await worker
+                            .ExecuteWithOutcomeAsync(
                             dispatchedRequest,
                             watchdog,
                             ct)
-                        .ConfigureAwait(false);
+                            .ConfigureAwait(false);
+                    result = workerOutcome.Result;
+                    notStartedCertified =
+                        workerOutcome
+                            .NotStartedCertified;
                 }
                 catch (Exception ex)
                 {
@@ -690,7 +718,9 @@ public sealed class TargetSupervisor : IAsyncDisposable
                     {
                         _mutationLedger.Finalize(
                             prepared,
-                            result);
+                            result,
+                            notStartedCertifiedByCurrentWorker:
+                                notStartedCertified);
                     }
                     catch (MutationLedgerException ex)
                     {
@@ -714,6 +744,19 @@ public sealed class TargetSupervisor : IAsyncDisposable
                             evidence: result.Evidence,
                             verifyMs: verifyMs);
                     }
+                }
+
+                // Artifact materialization is deliberately outside the
+                // mutation ledger boundary. The ledger persists the canonical
+                // full OperationResult so durable replay never depends on
+                // artifact retention; the response leaving the supervisor may
+                // then be replaced with a bounded opaque artifact envelope.
+                if (_resultMaterializer is not null &&
+                    result.Ok)
+                {
+                    result = _resultMaterializer(
+                        result,
+                        mutationClass);
                 }
 
                 if (!worker.IsAlive)
@@ -1072,6 +1115,187 @@ public sealed class TargetSupervisor : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Break-glass recovery for a wedged host generation. This deliberately
+    /// bypasses the normal target-operation semaphore and never issues COM
+    /// calls, so it remains usable while a script is hung inside the host.
+    /// Lease ownership plus exact PID/start-time identity remain mandatory.
+    /// </summary>
+    internal async Task<TargetHostTerminationResult>
+        TerminateHostGenerationAsync(
+            string leaseId,
+            int expectedProcessId,
+            DateTimeOffset expectedProcessStartedAt,
+            int waitTimeoutMs = DefaultHostTerminationWaitMs,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(leaseId);
+        ThrowIfDisposed();
+
+        if (waitTimeoutMs is < MinHostTerminationWaitMs or > MaxHostTerminationWaitMs)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(waitTimeoutMs),
+                waitTimeoutMs,
+                $"Host termination wait must be between {MinHostTerminationWaitMs} and {MaxHostTerminationWaitMs} ms.");
+        }
+
+        // TargetLeaseManager is independently synchronized. Do not take
+        // _operationGate here: it may be held by the exact wedged operation
+        // this break-glass path is intended to terminate. Renew the SAME lease
+        // before proceeding so an otherwise valid, near-expiry ownership token
+        // cannot lose its process-global lock halfway through recovery.
+        var recoveryLeaseTtlMs = Math.Max(
+            TargetLeaseManager.DefaultTtlMs,
+            checked(waitTimeoutMs + 30_000));
+        var recoveryGrant = _leases.RenewAtLeast(
+            leaseId,
+            recoveryLeaseTtlMs);
+        ScheduleLeaseExpiry(recoveryGrant);
+
+        if (Volatile.Read(ref _processLeaseLock) is null)
+        {
+            throw new TargetLeaseException(
+                "target_lease_lock_lost",
+                "The active lease no longer owns the cross-process target lock.",
+                retryable: false);
+        }
+
+        if (expectedProcessId != _target.Identity.ProcessId ||
+            expectedProcessStartedAt.ToUniversalTime() !=
+                _target.Identity.ProcessStartedAt.ToUniversalTime())
+        {
+            throw new TargetStateException(
+                "target_termination_confirmation_mismatch",
+                "Break-glass termination confirmation does not match the registered target process generation.",
+                _state.Snapshot().State,
+                retryable: false);
+        }
+
+        Process process;
+        try
+        {
+            process = Process.GetProcessById(_target.Identity.ProcessId);
+        }
+        catch (ArgumentException)
+        {
+            _state.MarkHostUnavailable("host_already_exited");
+            var workerAborted =
+                await ForceAbortCurrentWorkerAsync().ConfigureAwait(false);
+            return new TargetHostTerminationResult(
+                _target.Identity.ProcessId,
+                _target.Identity.ProcessStartedAt,
+                KillIssued: false,
+                AlreadyExited: true,
+                ExitObserved: true,
+                WorkerAbortIssued: workerAborted);
+        }
+
+        using (process)
+        {
+            process.Refresh();
+
+            DateTimeOffset observedStartedAt;
+            string? observedExecutablePath;
+            try
+            {
+                observedStartedAt = new DateTimeOffset(process.StartTime);
+                observedExecutablePath = process.MainModule?.FileName;
+            }
+            catch (InvalidOperationException)
+            {
+                _state.MarkHostUnavailable("host_already_exited");
+                var workerAborted =
+                    await ForceAbortCurrentWorkerAsync().ConfigureAwait(false);
+                return new TargetHostTerminationResult(
+                    _target.Identity.ProcessId,
+                    _target.Identity.ProcessStartedAt,
+                    KillIssued: false,
+                    AlreadyExited: true,
+                    ExitObserved: true,
+                    WorkerAbortIssued: workerAborted);
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                throw new TargetStateException(
+                    "target_generation_unproven",
+                    "The target process identity could not be read immediately " +
+                    $"before termination: {ex.Message}",
+                    TargetState.Unavailable,
+                    retryable: false);
+            }
+
+            if (string.IsNullOrWhiteSpace(observedExecutablePath) ||
+                !new HostProcessIdentity(
+                        process.Id,
+                        observedStartedAt,
+                        observedExecutablePath)
+                    .Matches(_target.Identity))
+            {
+                throw new TargetStateException(
+                    "target_generation_changed",
+                    "The target PID/start-time/executable identity no longer " +
+                    "matches the registered generation; termination was refused.",
+                    TargetState.Unavailable,
+                    retryable: false);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (process.HasExited)
+            {
+                _state.MarkHostUnavailable("host_already_exited");
+                var workerAborted =
+                    await ForceAbortCurrentWorkerAsync().ConfigureAwait(false);
+                return new TargetHostTerminationResult(
+                    _target.Identity.ProcessId,
+                    _target.Identity.ProcessStartedAt,
+                    KillIssued: false,
+                    AlreadyExited: true,
+                    ExitObserved: true,
+                    WorkerAbortIssued: workerAborted);
+            }
+
+            process.Kill(entireProcessTree: false);
+            _state.MarkHostUnavailable("host_termination_requested");
+
+            // Kill only the owned helper process out of band as well. This
+            // cannot mutate Illustrator; it prevents a blocked COM worker from
+            // keeping the broker lane occupied after host termination.
+            var workerAbortIssued =
+                await ForceAbortCurrentWorkerAsync().ConfigureAwait(false);
+
+            var exitObserved = false;
+            using (var waitCts = new CancellationTokenSource(
+                       TimeSpan.FromMilliseconds(waitTimeoutMs)))
+            {
+                try
+                {
+                    await process
+                        .WaitForExitAsync(waitCts.Token)
+                        .ConfigureAwait(false);
+                    exitObserved = true;
+                }
+                catch (OperationCanceledException)
+                {
+                    process.Refresh();
+                    exitObserved = process.HasExited;
+                }
+            }
+
+            if (exitObserved)
+                _state.MarkHostUnavailable("host_terminated");
+
+            return new TargetHostTerminationResult(
+                _target.Identity.ProcessId,
+                _target.Identity.ProcessStartedAt,
+                KillIssued: true,
+                AlreadyExited: false,
+                ExitObserved: exitObserved,
+                WorkerAbortIssued: workerAbortIssued);
+        }
+    }
+
     public async Task MarkTargetUnavailableAsync(
         string incidentKind = "target_not_discovered",
         CancellationToken cancellationToken = default)
@@ -1355,6 +1579,27 @@ public sealed class TargetSupervisor : IAsyncDisposable
         finally
         {
             _lifecycleGate.Release();
+        }
+    }
+
+    private async Task<bool> ForceAbortCurrentWorkerAsync()
+    {
+        var worker = Volatile.Read(ref _worker);
+        if (worker is null || !worker.IsAlive)
+            return false;
+
+        try
+        {
+            await worker
+                .ForceTerminateAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch
+        {
+            // Exact host-generation termination is authoritative. A helper
+            // cleanup failure must not mask whether the Adobe process died.
+            return false;
         }
     }
 

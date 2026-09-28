@@ -64,10 +64,13 @@ malformed frames terminate the offending client without poisoning the server.
 connects to the runtime pipe and serves NDJSON on stdin/stdout, forwarding each
 line to the runtime unchanged. Neither mode introduces a second dispatcher.
 
+The NDJSON server admits bounded concurrent requests (32 by default), and responses are correlated by `id`, not submission order. The CLI proxy uses `RuntimePipeClientPool`: one single-flight pipe client can serve sequential calls repeatedly, while overlapping calls rent independent runtime-pipe connections. That distinction is required for control-plane liveness: a later `core.target.host.terminate` request must be able to reach the RuntimeSupervisor even if an earlier script request is still blocked on another connection.
+
 NDJSON rules (validated by Gate 0D and by
 `tests/ComTool.Transport.Stdio.Tests/CrossTransportParityTests.cs`):
 
 - exactly one response per non-empty input line;
+- responses may complete out of submission order and must be matched by request `id`;
 - malformed input fails only that line (`invalid_json`);
 - strict root fields (`JsonUnmappedMemberHandling.Disallow`);
 - tagged result values preserve JSON types;
@@ -76,7 +79,7 @@ NDJSON rules (validated by Gate 0D and by
 ### 2.3 MCP
 
 MCP is an **adapter**, never the architecture. `ComTool.Transport.Mcp` exposes a
-single tool, `adobe_execute(operation, inputJson, requestId?, leaseId?, targetHost?, targetId?)`,
+single tool, `adobe_execute(operation, inputJson, requestId?, leaseId?, targetHost?, targetId?, workerWatchdogMs?, retryBudgetMs?, preconditionsJson?, postconditionsJson?)`,
 which builds a real `OperationRequest`, validates it with the same
 `ProtocolJson.ValidateRequest`, and forwards it over the ordinary runtime pipe.
 All Adobe/host logic remains outside the MCP project.
@@ -91,25 +94,29 @@ path and a direct pipe call against a live runtime.
 | Dimension | State |
 |---|---|
 | CLI ↔ runtime payload | Parity via `OperationRequest`/`OperationResult` (`Cli.Program.cs` `RunRuntimeOperation`). |
-| CLI ↔ runtime discovery | All runtime-capable CLI commands honor `--pipe`, so the CLI reaches the default, an env-configured, or an explicitly named runtime pipe. |
+| CLI ↔ runtime discovery | Every CLI command of consequence honors `--pipe` and reaches the persistent RuntimeHost; the CLI no longer instantiates host adapters or workers directly. |
 | stdio ↔ runtime payload | Parity by construction: `RuntimeHost --stdio` and `Cli stdio` both carry `OperationRequest` frames. Covered by `CrossTransportParityTests`. |
 | pipe ↔ stdio framing independence | Same handler, identical canonical envelope across both framings (`CrossTransportParityTests.SameRequestYieldsIdenticalEnvelopeAcrossTransports`). |
 | MCP ↔ runtime payload | Parity via `RuntimeBridge` + `--self-test` (success and error envelopes). |
 | Error envelope | `invalid_json`, `invalid_operation`, `invalid_lease_id`, `unsupported_operation` all produced from the shared protocol/validation layer. |
 
-### 3.1 Known non-parity (by design, not a defect)
+### 3.1 One CLI authority path
 
-- **Direct mode bypasses the supervisor.** CLI commands without `--runtime`
-  (`targets`, `capabilities`, `status`, `snapshot`, `get`, `call-read` via
-  `--broker`/direct) execute in-process against the adapter for diagnostics.
-  They are explicitly *not* the production path; mutation-bearing commands
-  (`eval`, lease/incident/reconcile) are runtime-only and rejected otherwise.
-- **CLI `health`/`targets` shapes.** `targets` without `--runtime`
-  emits a discovery-shaped summary (`{ok, protocolVersion, targets}`) rather than
-  a `core.targets.list` `OperationResult`. Use `--runtime` for the canonical
-  envelope. This is a documented diagnostic shortcut, not a second semantics.
-- **`script.eval`, lease, incident, and both reconcile operations** are runtime-only. This is a
-  deliberate mutation-safety boundary, not a transport gap.
+- **There is no direct or CLI-owned broker mode.** `ComTool.Cli` has no project
+  reference to the Illustrator adapter or supervisor assembly and cannot connect
+  COM or launch a worker itself. Legacy `--broker` / `--worker` options are
+  rejected before runtime connection.
+- `--runtime` is accepted as a compatibility no-op for older automation, but it
+  no longer selects a different execution mode: RuntimeHost is always the
+  authority path.
+- `targets`, `capabilities`, `status`, `snapshot`, `get`, `call-read`,
+  structure reads, scripts, leases, incidents, reconciliation, and artifact
+  retrieval all normalize to an ordinary `OperationRequest` and cross the
+  runtime pipe.
+- `incident-resolve-offline` is the CLI convenience for
+  `core.incident.resolve`: it carries the durable target id, incident request
+  id, exact `expectedUpdatedAt` revision token, explicit resolution, and
+  rationale without fabricating a target lease for a dead generation.
 - `mutation-reconcile` is dispatched through the same runtime operation catalog
   and supervisor as every other transport. It requires the active incident ID,
   current target-state revision, lease, and the exact postcondition list
@@ -125,7 +132,7 @@ path and a direct pipe call against a live runtime.
 |---|---|
 | Runtime pipe name | `--pipe`, else `COMTOOL_V2_RUNTIME_PIPE`, else `comtool-v2-runtime-<sessionId>`. Every runtime-capable CLI command accepts `--pipe` (and `Cli stdio`), so the CLI can reach an isolated/shadow runtime. |
 | Runtime single-instance guard | `Local\ComToolV2Runtime_<sessionId>` (or a hash for named pipes). |
-| Worker executable | `--worker`, else `COMTOOL_V2_WORKER_PATH`, else `ComTool.Worker.exe` beside the runtime host. |
+| Worker executable | RuntimeHost-owned configuration (`--worker`, else `COMTOOL_V2_WORKER_PATH`, else `ComTool.Worker.exe` beside RuntimeHost). The CLI never resolves or launches a worker. |
 | State directory | `--state-dir`, else `COMTOOL_V2_STATE_DIR`, else the supervisor default. |
 | Host families | `--host` (repeatable); defaults to `illustrator`. |
 

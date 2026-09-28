@@ -365,12 +365,12 @@
         "Default app spec version-tied.",
         "One-off process model limits persistent debug conversation."
       ],
-      "v2Operation": "debug.session.open / debug.breakpoints.*",
+      "v2Operation": "debug.session.open / debug.session.command",
       "facet": "IDebugRuntime",
-      "mutationClass": "debug_state",
-      "idempotency": "varies",
+      "mutationClass": "external_side_effect",
+      "idempotency": "non_replayable",
       "recovery": "invalidate_on_host_restart",
-      "phase": "Illustrator Wave D",
+      "phase": "Illustrator Wave D — persistent worker-owned session implemented",
       "oracle": [
         "legacy ESD integration tests",
         "live debugger fixtures"
@@ -560,12 +560,12 @@
         "Not arbitrary native debugger access.",
         "Plugin calls from background IPC threads must not invoke Illustrator suites directly."
       ],
-      "v2Operation": "plugin.call",
+      "v2Operation": "plugin.message",
       "facet": "IPluginMessaging",
-      "mutationClass": "declared_by_plugin_method",
-      "idempotency": "declared_by_plugin_method",
-      "recovery": "plugin_contract_and_target_reconcile",
-      "phase": "Illustrator Wave E",
+      "mutationClass": "external_side_effect",
+      "idempotency": "unknown_at_generic_bridge",
+      "recovery": "durable_mutation_incident_and_explicit_reconciliation",
+      "phase": "Illustrator Wave E — generic bridge implemented",
       "oracle": [
         "reusable plugin RPC fixture",
         "VectorIPC integration tests"

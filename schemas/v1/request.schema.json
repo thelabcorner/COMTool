@@ -20,11 +20,16 @@
       "type": ["object", "null"],
       "additionalProperties": false,
       "properties": {
-        "queueTimeoutMs": { "type": ["integer", "null"], "minimum": 0 },
-        "retryBudgetMs": { "type": ["integer", "null"], "minimum": 0 },
-        "operationSoftTimeoutMs": { "type": ["integer", "null"], "minimum": 0 },
-        "workerWatchdogMs": { "type": ["integer", "null"], "minimum": 0 },
-        "allowReplayAfterAmbiguous": { "type": "boolean" },
+        "workerWatchdogMs": {
+          "type": ["integer", "null"],
+          "minimum": 100,
+          "maximum": 3600000
+        },
+        "retryBudgetMs": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 3600000
+        },
         "leaseId": {
           "type": ["string", "null"],
           "minLength": 32,

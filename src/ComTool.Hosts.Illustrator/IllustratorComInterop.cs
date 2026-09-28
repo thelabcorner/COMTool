@@ -14,6 +14,50 @@ internal static class IllustratorComInterop
     private const int RpcEServerCallRetryLater = unchecked((int)0x8001010A);
     private const int RpcSCallFailed = unchecked((int)0x800706BE);
 
+    private static readonly AsyncLocal<TimeSpan?> RequestRetryBudget = new();
+
+    /// <summary>
+    /// Applies one operation's retry budget to every COM helper reached on the
+    /// current async/thread flow. The worker command lane is serialized, and
+    /// the previous scope is restored on dispose so no request can leak policy
+    /// into the next one.
+    /// </summary>
+    internal static IDisposable PushRetryBudget(int? retryBudgetMs)
+    {
+        if (retryBudgetMs is { } value &&
+            !OperationPolicy.IsValidRetryBudget(value))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(retryBudgetMs),
+                value,
+                $"Retry budget must be between " +
+                $"{OperationPolicy.MinRetryBudgetMs} and " +
+                $"{OperationPolicy.MaxRetryBudgetMs} ms.");
+        }
+
+        var previous = RequestRetryBudget.Value;
+        RequestRetryBudget.Value = retryBudgetMs is { } milliseconds
+            ? TimeSpan.FromMilliseconds(milliseconds)
+            : null;
+        return new RetryBudgetScope(previous);
+    }
+
+    private static TimeSpan ResolveRetryBudget(TimeSpan? explicitBudget) =>
+        explicitBudget ??
+        RequestRetryBudget.Value ??
+        TimeSpan.FromMilliseconds(OperationPolicy.DefaultRetryBudgetMs);
+
+    private sealed class RetryBudgetScope(TimeSpan? previous) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                RequestRetryBudget.Value = previous;
+        }
+    }
+
     [DllImport("ole32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
     private static extern int CLSIDFromProgID(string lpszProgID, out Guid lpclsid);
 
@@ -33,6 +77,22 @@ internal static class IllustratorComInterop
         var activeHr = GetActiveObject(ref clsid, IntPtr.Zero, out var instance);
         Marshal.ThrowExceptionForHR(activeHr);
         return instance;
+    }
+
+    public static object Activate(string progId)
+    {
+        EnsureSta();
+        ArgumentException.ThrowIfNullOrWhiteSpace(progId);
+
+        var type = Type.GetTypeFromProgID(
+            progId,
+            throwOnError: true)
+            ?? throw new COMException(
+                $"COM ProgID '{progId}' did not resolve to a registered class.");
+
+        return Activator.CreateInstance(type)
+            ?? throw new COMException(
+                $"COM activation for '{progId}' returned null.");
     }
 
     public static void EnsureSta()
@@ -61,8 +121,7 @@ internal static class IllustratorComInterop
         ArgumentNullException.ThrowIfNull(source);
         EnsureSta();
 
-        var budget =
-            rejectionRetryBudget ?? TimeSpan.FromSeconds(2);
+        var budget = ResolveRetryBudget(rejectionRetryBudget);
         var started = System.Diagnostics.Stopwatch.StartNew();
         var delay = TimeSpan.FromMilliseconds(25);
 
@@ -135,7 +194,7 @@ internal static class IllustratorComInterop
         Func<T> operation,
         TimeSpan? retryBudget = null)
     {
-        var budget = retryBudget ?? TimeSpan.FromSeconds(2);
+        var budget = ResolveRetryBudget(retryBudget);
         var started = System.Diagnostics.Stopwatch.StartNew();
         var delay = TimeSpan.FromMilliseconds(25);
 
@@ -171,6 +230,150 @@ internal static class IllustratorComInterop
                     ex.Message,
                     retryable: false,
                     ExecutionState.Started,
+                    ex.HResult,
+                    ex);
+            }
+        }
+    }
+
+    public static object? InvokeMutationMethod(
+        object target,
+        string method,
+        object?[] args,
+        TimeSpan? rejectionRetryBudget = null)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(method);
+        ArgumentNullException.ThrowIfNull(args);
+        EnsureSta();
+
+        var budget = ResolveRetryBudget(rejectionRetryBudget);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var delay = TimeSpan.FromMilliseconds(25);
+
+        while (true)
+        {
+            try
+            {
+                return InvokeMethodOnce(target, method, args);
+            }
+            catch (COMException ex)
+                when (IsDefinitelyRejectedBeforeExecution(ex.HResult))
+            {
+                var remaining = budget - started.Elapsed;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    throw new HostAdapterException(
+                        "host_busy",
+                        ex.Message,
+                        retryable: true,
+                        ExecutionState.NotStarted,
+                        ex.HResult,
+                        ex);
+                }
+
+                var sleep =
+                    delay <= remaining ? delay : remaining;
+                Thread.Sleep(sleep);
+                delay = TimeSpan.FromMilliseconds(
+                    Math.Min(delay.TotalMilliseconds * 2, 250));
+            }
+            catch (COMException ex)
+            {
+                throw new HostAdapterException(
+                    Classify(ex.HResult),
+                    ex.Message,
+                    retryable: false,
+                    ExecutionState.Ambiguous,
+                    ex.HResult,
+                    ex);
+            }
+            catch (Exception ex)
+                when (ex is MissingMethodException or
+                    TargetParameterCountException or
+                    ArgumentException)
+                {
+                    throw new HostAdapterException(
+                        "com_signature_mismatch",
+                        ex.Message,
+                        retryable: false,
+                        ExecutionState.NotStarted,
+                        ex.HResult,
+                        ex);
+                }
+            }
+        }
+
+    /// <summary>
+    /// Property-put sibling of <see cref="InvokeMutationMethod"/>. The retry
+    /// budget covers only HRESULTs rejected before the call can run; once the
+    /// host may have accepted the put, failure is ambiguous and must never be
+    /// replayed.
+    /// </summary>
+    public static void PutMutationProperty(
+        object target,
+        string property,
+        object? value,
+        TimeSpan? rejectionRetryBudget = null)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(property);
+        EnsureSta();
+
+        var budget = ResolveRetryBudget(rejectionRetryBudget);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var delay = TimeSpan.FromMilliseconds(25);
+
+        while (true)
+        {
+            try
+            {
+                InvokePropertyPutOnce(target, property, value);
+                return;
+            }
+            catch (COMException ex)
+                when (IsDefinitelyRejectedBeforeExecution(ex.HResult))
+            {
+                var remaining = budget - started.Elapsed;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    throw new HostAdapterException(
+                        "host_busy",
+                        ex.Message,
+                        retryable: true,
+                        ExecutionState.NotStarted,
+                        ex.HResult,
+                        ex);
+                }
+
+                var sleep =
+                    delay <= remaining ? delay : remaining;
+                Thread.Sleep(sleep);
+                delay = TimeSpan.FromMilliseconds(
+                    Math.Min(delay.TotalMilliseconds * 2, 250));
+            }
+            catch (COMException ex)
+            {
+                throw new HostAdapterException(
+                    Classify(ex.HResult),
+                    ex.Message,
+                    retryable: false,
+                    ExecutionState.Ambiguous,
+                    ex.HResult,
+                    ex);
+            }
+            catch (Exception ex)
+                when (ex is MissingMemberException or
+                    MissingMethodException or
+                    TargetException or
+                    TargetParameterCountException or
+                    ArgumentException)
+            {
+                throw new HostAdapterException(
+                    "com_signature_mismatch",
+                    ex.Message,
+                    retryable: false,
+                    ExecutionState.NotStarted,
                     ex.HResult,
                     ex);
             }
@@ -217,6 +420,66 @@ internal static class IllustratorComInterop
                     modifiers: null,
                     culture: CultureInfo.InvariantCulture,
                     namedParameters: null);
+        }
+        catch (TargetInvocationException ex)
+            when (ex.InnerException is COMException comException)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                .Capture(comException)
+                .Throw();
+
+            throw;
+        }
+    }
+
+    private static object? InvokeMethodOnce(
+        object target,
+        string method,
+        object?[] args)
+    {
+        try
+        {
+            return target
+                .GetType()
+                .InvokeMember(
+                    method,
+                    BindingFlags.InvokeMethod |
+                    BindingFlags.OptionalParamBinding,
+                    binder: null,
+                    target,
+                    args,
+                    modifiers: null,
+                    culture: CultureInfo.InvariantCulture,
+                    namedParameters: null);
+        }
+        catch (TargetInvocationException ex)
+            when (ex.InnerException is COMException comException)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                .Capture(comException)
+                .Throw();
+
+            throw;
+        }
+    }
+
+    private static void InvokePropertyPutOnce(
+        object target,
+        string property,
+        object? value)
+    {
+        try
+        {
+            target.GetType().InvokeMember(
+                property,
+                BindingFlags.SetProperty |
+                BindingFlags.OptionalParamBinding,
+                binder: null,
+                target,
+                [value],
+                modifiers: null,
+                culture: CultureInfo.InvariantCulture,
+                namedParameters: null);
         }
         catch (TargetInvocationException ex)
             when (ex.InnerException is COMException comException)

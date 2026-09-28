@@ -1,0 +1,229 @@
+{
+  "date": "2026-09-26",
+  "scope": "COM Tool V2 universal programmatic surface tranche: caller-controlled Adobe execution watchdogs, out-of-band wedged-host recovery, concurrent stdio/runtime-pipe admission, typed pure-Node control SDK, target-bound universal sessions, explicit reconciliation lifecycle, and live Illustrator snapshot normalization",
+  "productInvariant": {
+    "definition": "COM Tool V2 remains a universal extensible programmatic development/control surface into Adobe desktop software, with Illustrator as the primary current host.",
+    "nodeSdkRole": "Generic protocol/runtime client first; target sessions and run/test helpers are orchestration conveniences over the existing RuntimeHost -> RuntimeSupervisor -> Worker path, never a parallel COM implementation.",
+    "ciProviderSpecificCodeAdded": false
+  },
+  "executionTimeout": {
+    "policyField": "workerWatchdogMs",
+    "minimumMs": 100,
+    "maximumMs": 3600000,
+    "historicalDefaultMs": 60000,
+    "callerOverrideReachesWorkerBroker": true,
+    "cliOption": "--timeout-ms",
+    "nodeOption": "watchdogMs",
+    "callerWaitControls": [
+      "AbortSignal",
+      "responseTimeoutMs"
+    ],
+    "callerWaitCancellationCancelsAdobeWork": false,
+    "timeoutAfterDispatchProvesHostStopped": false,
+    "automaticScriptRetryAfterTimeout": false
+  },
+  "breakGlassRecovery": {
+    "operation": "core.target.host.terminate",
+    "usesFreshComDiscovery": false,
+    "waitsForOrdinaryTargetOperationGate": false,
+    "requiresActiveLease": true,
+    "requiresExpectedProcessId": true,
+    "requiresExpectedProcessStartedAt": true,
+    "revalidatesOsProcessGeneration": true,
+    "extendsSameLeaseForBoundedRecoveryWindow": true,
+    "neverShortensExistingLease": true,
+    "terminatesOwnedWorkerOutOfBand": true,
+    "wrongLeaseRefusedWithoutKillingHost": true,
+    "wrongGenerationRefusedWithoutKillingHost": true,
+    "clearsPriorMutationAmbiguity": false,
+    "automaticScriptRetryAfterTermination": false
+  },
+  "transportConcurrency": {
+    "runtimePipeSupportsIndependentConcurrentClients": true,
+    "runtimePipeClientPool": {
+      "singleConnectionRemainsSingleFlight": true,
+      "defaultMaxIdleClients": 32,
+      "sequentialCallsReuseIdleConnections": true,
+      "overlappingCallsUseIndependentConnections": true
+    },
+    "ndjson": {
+      "defaultMaxConcurrentRequests": 32,
+      "responsesMayCompleteOutOfSubmissionOrder": true,
+      "requestIdCorrelationRequired": true,
+      "stdoutWritesSerialized": true
+    },
+    "singleStdioProxyIsOrderedSingleFlight": false,
+    "realCliProcessBlockedRequestBypassTest": true
+  },
+  "nodeSurface": {
+    "transport": "persistent NDJSON through ComTool.Cli stdio into the existing RuntimeHost pipe",
+    "genericApi": "ComToolClient.execute(operation, input, options)",
+    "targetSessionApi": "ComToolRunner.openSession() -> ComToolTargetSession",
+    "typescriptDeclarations": "sdk/node/index.d.ts",
+    "typescriptNodeNextSmokePassed": true,
+    "runnerApis": [
+      "ComToolRunner.runFile",
+      "ComToolRunner.testFile",
+      "ComToolRunner.runEval",
+      "ComToolRunner.testEval"
+    ],
+    "targetSessionReadApis": [
+      "status",
+      "snapshot",
+      "capabilities",
+      "comGet",
+      "comCallRead"
+    ],
+    "targetSessionReconciliationApis": [
+      "refreshTarget",
+      "reconcile",
+      "reconcileMutation",
+      "resolveIncident"
+    ],
+    "targetSessionLeaseApis": [
+      "bindLease",
+      "unbindLease",
+      "acquireLease",
+      "renewLease",
+      "releaseLease"
+    ],
+    "recoveryApi": "terminateHostGeneration",
+    "shaPinsRunFileBytes": true,
+    "inlineEvalSourceHashOnly": true,
+    "structuredEvents": true,
+    "structuredArtifacts": true,
+    "artifactLeaseIdsRedacted": true,
+    "transportAmbiguityPreservesRequestIdAndOperation": true,
+    "concurrentOutOfOrderResponsesCorrelatedByRequestId": true,
+    "targetSessionAutoReleasesLease": false,
+    "reconciliationDoesNotInferIncidentIdentityOrRevision": true,
+    "deterministicExitCodes": {
+      "0": "completed/success",
+      "1": "deterministic operation or assertion failure",
+      "2": "started or ambiguous outcome; do not replay",
+      "3": "control/transport/cleanup failure requiring inspection"
+    }
+  },
+  "illustratorSnapshot": {
+    "systemArrayCollectionNormalization": true,
+    "requiredDocumentsArraySupported": true,
+    "arrayBackedLayersArtboardsPageItemsPathItemsSupported": true,
+    "nullSelectionDynamicLeakFixed": true,
+    "liveIllustratorVersion": "30.6.0",
+    "liveSnapshotPassed": true
+  },
+  "embeddedEson": {
+    "canonicalSha256": "51ce10b9a08fae7cfba495e264c4a87607c1a104c8b18b44f1b77e863fc24558",
+    "embeddedSha256": "51ce10b9a08fae7cfba495e264c4a87607c1a104c8b18b44f1b77e863fc24558",
+    "syncCheckPassed": true
+  },
+  "deterministicGate": {
+    "releaseBuild": {
+      "warnings": 0,
+      "errors": 0,
+      "artifactsPathIsolatedFromLiveDevelopmentRuntime": true
+    },
+    "dotnetTests": {
+      "passed": 318,
+      "failed": 0,
+      "skipped": 0,
+      "suiteCounts": {
+        "ComTool.Runtime.Tests": 44,
+        "ComTool.Protocol.Tests": 25,
+        "ComTool.Transport.Pipe.Tests": 7,
+        "ComTool.Hosts.Illustrator.Tests": 109,
+        "ComTool.Transport.Stdio.Tests": 17,
+        "ComTool.Runtime.Ipc.Tests": 8,
+        "ComTool.Supervisor.Tests": 102,
+        "ComTool.Transport.Mcp.Tests": 6
+      }
+    },
+    "schemaRegistry": {
+      "matched": 31,
+      "mismatched": 0
+    },
+    "nodeTests": {
+      "passed": 17,
+      "failed": 0,
+      "covers": [
+        "strict CLI argument parsing",
+        "target-bound universal session lifecycle",
+        "explicit target refresh and reconciliation request wiring",
+        "arbitrary future operation forwarding",
+        "out-of-order response correlation",
+        "pre-submit abort",
+        "post-submit local wait timeout ambiguity",
+        "post-submit abort ambiguity",
+        "lease renewal",
+        "preselected strong-target reuse",
+        "runEval source-hash provenance",
+        "SHA-pinned runFile",
+        "ambiguous lease retention and generation-pinned recovery",
+        "no replay after transport loss",
+        "one-shot testEval and testFile assertions"
+      ]
+    },
+    "typescriptSmoke": {
+      "strict": true,
+      "module": "NodeNext",
+      "moduleResolution": "NodeNext",
+      "passed": true
+    },
+    "npmPackDryRun": {
+      "entryCount": 10,
+      "testsExcluded": true,
+      "runtimeFilesPresent": [
+        "README.md",
+        "bin/comtool-run.mjs",
+        "index.d.ts",
+        "index.mjs",
+        "lib/cli-options.mjs",
+        "lib/client.mjs",
+        "lib/recovery.mjs",
+        "lib/runner.mjs",
+        "lib/session.mjs",
+        "package.json"
+      ]
+    }
+  },
+  "validationRelease": {
+    "version": "0.1.2-dev.20260926.9",
+    "runtimeIdentifier": "win-x64",
+    "sourceCommit": "65ec79f776c8f89eed468401d7c5ca3253434eeb",
+    "sourceDirty": true,
+    "authenticodeSigned": false,
+    "archiveSha256": "febcb1693bdd29eb44b4eb8ef27446463c2ff025d6cac0c00035a2bcc3e30435",
+    "archiveBytes": 38969961,
+    "fileCount": 258,
+    "packageSmokePowerShell51": true,
+    "shippedZipSmokePowerShell51": true,
+    "powerShellVersion": "5.1.22621.6133",
+    "nodeRuntimeFilesInReleaseManifest": 10
+  },
+  "livePackageProof": {
+    "mutating": false,
+    "runtimeInformationalVersion": "0.1.2-dev.20260926.9+65ec79f776c8f89eed468401d7c5ca3253434eeb",
+    "frontEnd": "pipe",
+    "pipe": "ctv2-sdk-session-live-dev9",
+    "illustratorVersion": "30.6.0",
+    "illustratorProcessId": 45960,
+    "illustratorProcessStartedAt": "2026-09-26T14:16:01.9806023-05:00",
+    "strongTargetId": "illustrator:775050e0d6dee8a3d8dd098a",
+    "strongTargetDiscovered": true,
+    "refreshTargetPassed": true,
+    "statusPassed": true,
+    "snapshotPassed": true,
+    "genericReconcilePassed": true,
+    "targetSessionLeaseLifecyclePassed": true,
+    "testEvalExpected": 42,
+    "testEvalActual": 42,
+    "scriptExecuted": true,
+    "documentMutated": false,
+    "temporaryPackagedRuntimeStoppedAfterProof": true
+  },
+  "liveLongRunningScriptStatus": {
+    "greaterThan60SecondHostExecutionActuallyRunInThisTranche": false,
+    "reason": "The original pathological ESUUID long-name lane was not rerun in this tranche because the user Illustrator process remained a pre-existing session and no destructive termination proof was required for the now-deterministically-covered control path.",
+    "claimBoundary": "Caller-controlled watchdog propagation, concurrent recovery admission, no-replay ambiguity semantics, target sessions, explicit reconciliation wiring, TypeScript declarations, and the exact shipped package control path are proven. Comparative timing for the original pathological ESUUID lane remains separate benchmark work."
+  }
+}

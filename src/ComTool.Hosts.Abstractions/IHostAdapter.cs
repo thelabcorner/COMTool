@@ -12,3 +12,15 @@ public interface IHostAdapter
         HostTargetDescriptor target,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Optional host-adapter facet for explicit host activation. The caller must
+/// still own launch policy/provenance; this facet only performs host-specific
+/// activation and returns a truthful observation.
+/// </summary>
+public interface IHostLaunchAdapter : IHostAdapter
+{
+    ValueTask<HostLaunchObservation> LaunchAsync(
+        HostLaunchSpec spec,
+        CancellationToken cancellationToken = default);
+}

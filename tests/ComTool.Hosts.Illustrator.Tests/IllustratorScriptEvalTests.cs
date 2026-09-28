@@ -231,6 +231,99 @@ public sealed class IllustratorScriptEvalTests
     }
 
     [Theory]
+    [InlineData(IllustratorScriptEval.EsonReadyToken, true)]
+    [InlineData("comtool-eson-missing", false)]
+    public void CodecStatusProbesPinnedRuntimeWithoutBootstrapping(
+        string probeResult,
+        bool expectedInstalled)
+    {
+        using var input = JsonDocument.Parse("{}");
+        var request = new OperationRequest
+        {
+            ProtocolVersion = ProtocolVersion.Current,
+            Id = "codec-status-test",
+            Operation = IllustratorScriptCodecStatus.Operation,
+            Input = input.RootElement.Clone()
+        };
+
+        var calls = 0;
+        string? observedSource = null;
+        int? observedMode = null;
+
+        var result = IllustratorScriptCodecStatus.Execute(
+            new object(),
+            request,
+            (_, source, mode) =>
+            {
+                calls++;
+                observedSource = source;
+                observedMode = mode;
+                return probeResult;
+            });
+
+        Assert.True(result.Ok, result.Error?.Message);
+        Assert.Equal(1, calls);
+        Assert.Equal(
+            IllustratorScriptEval.EsonPresenceProbeSource,
+            observedSource);
+        Assert.Equal(
+            IllustratorScriptEval.NeverShowDebugger,
+            observedMode);
+        Assert.DoesNotContain(
+            "var ESON_JSON2",
+            observedSource,
+            StringComparison.Ordinal);
+
+        var payload = result.Result!.Value!.Value;
+        Assert.Equal("eson", payload.GetProperty("codec").GetString());
+        Assert.True(payload.GetProperty("optional").GetBoolean());
+        Assert.Equal(
+            IllustratorEsonRuntime.ExpectedSha256,
+            payload.GetProperty("expectedSha256").GetString());
+        Assert.True(
+            payload.GetProperty("embeddedVerified").GetBoolean());
+        Assert.Equal(
+            expectedInstalled,
+            payload.GetProperty("installed").GetBoolean());
+        Assert.Equal(
+            expectedInstalled,
+            payload.GetProperty("installedSha256Matches").GetBoolean());
+        Assert.Equal(
+            !expectedInstalled,
+            payload.GetProperty("bootstrapRequired").GetBoolean());
+        Assert.Equal(
+            "bootstrap_on_demand",
+            payload.GetProperty("fallback").GetString());
+    }
+
+    [Fact]
+    public void CodecStatusRejectsUnknownInputWithoutProbing()
+    {
+        using var input = JsonDocument.Parse("""{"install":true}""");
+        var request = new OperationRequest
+        {
+            ProtocolVersion = ProtocolVersion.Current,
+            Id = "codec-status-invalid",
+            Operation = IllustratorScriptCodecStatus.Operation,
+            Input = input.RootElement.Clone()
+        };
+        var calls = 0;
+
+        var result = IllustratorScriptCodecStatus.Execute(
+            new object(),
+            request,
+            (_, _, _) =>
+            {
+                calls++;
+                return IllustratorScriptEval.EsonReadyToken;
+            });
+
+        Assert.False(result.Ok);
+        Assert.Equal(OperationStatus.InvalidRequest, result.Status);
+        Assert.Equal(0, calls);
+    }
+
+    [Theory]
     [InlineData("\"true\"", "string")]
     [InlineData("true", "boolean")]
     [InlineData("123", "number")]

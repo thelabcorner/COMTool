@@ -241,7 +241,9 @@ internal static class OperationConditionEvaluator
         };
     }
 
-    private static bool ValuesEqual(
+    // Shared with the watch runtime so JSON-type-exact equality has exactly
+    // one implementation: a boolean must never match a number.
+    internal static bool ValuesEqual(
         ProtocolValue actual,
         ProtocolValue expected)
     {

@@ -17,7 +17,95 @@ public static class BuiltInOperations
             Scope: OperationExecutionScope.Runtime),
 
         new OperationDefinition(
+            "core.operations.list",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime),
+
+        new OperationDefinition(
+            "core.operation.describe",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime),
+
+        new OperationDefinition(
+            "core.operation.examples",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "core.artifact.describe",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "core.artifact.read",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "knowledge.describe",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "knowledge.search",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "knowledge.symbol",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "knowledge.enum",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "knowledge.paths",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "script.validate",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "watch.condition",
+            MutationClass.ReadOnly,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
             "core.incidents.list",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime),
+
+        new OperationDefinition(
+            "core.incident.resolve",
             MutationClass.ReadOnly,
             RequiresTarget: false,
             Scope: OperationExecutionScope.Runtime),
@@ -27,6 +115,20 @@ public static class BuiltInOperations
             MutationClass.ReadOnly,
             RequiresTarget: false,
             Scope: OperationExecutionScope.Runtime),
+
+        new OperationDefinition(
+            "core.target.attach",
+            MutationClass.ReadOnly,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "core.target.launch",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
 
         new OperationDefinition(
             "core.target.capabilities",
@@ -100,6 +202,13 @@ public static class BuiltInOperations
             RequiresLease: true),
 
         new OperationDefinition(
+            "core.target.host.terminate",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Runtime,
+            RequiresLease: true),
+
+        new OperationDefinition(
             "core.target.status",
             MutationClass.ReadOnly,
             RequiresTarget: true,
@@ -136,6 +245,51 @@ public static class BuiltInOperations
             MutationResolution: MutationResolutionMode.Fixed),
 
         new OperationDefinition(
+            "illustrator.layer.setName",
+            MutationClass.IdempotentWrite,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "illustrator.layer.setVisible",
+            MutationClass.IdempotentWrite,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "illustrator.layer.setLocked",
+            MutationClass.IdempotentWrite,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "illustrator.layer.setOpacity",
+            MutationClass.IdempotentWrite,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "illustrator.artboard.setRect",
+            MutationClass.IdempotentWrite,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
             "com.get",
             MutationClass.ReadOnly,
             RequiresTarget: true,
@@ -146,6 +300,111 @@ public static class BuiltInOperations
             MutationClass.ReadOnly,
             RequiresTarget: true,
             Scope: OperationExecutionScope.Host),
+
+        new OperationDefinition(
+            "com.set",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "com.call",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "plugin.message",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "plugin.debug.diagnostics",
+            MutationClass.ReadOnly,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "plugin.debug.control",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "illustrator.action.run",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "illustrator.menu.execute",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "debug.session.open",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "debug.session.status",
+            MutationClass.ReadOnly,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "debug.session.command",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "debug.session.close",
+            MutationClass.ExternalSideEffect,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            RequiresLease: true,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
+            "script.codec.status",
+            MutationClass.ReadOnly,
+            RequiresTarget: true,
+            Scope: OperationExecutionScope.Host,
+            Host: "illustrator",
+            MutationResolution: MutationResolutionMode.Fixed),
 
         new OperationDefinition(
             "script.eval",

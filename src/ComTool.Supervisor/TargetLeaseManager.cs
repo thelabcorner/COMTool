@@ -32,7 +32,9 @@ internal sealed class TargetLeaseManager
 {
     public const int DefaultTtlMs = 30_000;
     public const int MinTtlMs = 1_000;
-    public const int MaxTtlMs = 300_000;
+    // Must cover the maximum supported worker watchdog plus enough time for
+    // the caller to issue break-glass host-generation recovery afterward.
+    public const int MaxTtlMs = 3_720_000;
 
     private readonly object _gate = new();
     private readonly Func<DateTimeOffset> _clock;
@@ -110,6 +112,44 @@ internal sealed class TargetLeaseManager
                 active.LeaseId,
                 active.AcquiredAt,
                 now.AddMilliseconds(ttl));
+
+            _active = new ActiveLease(
+                grant.LeaseId,
+                grant.AcquiredAt,
+                grant.ExpiresAt);
+
+            return grant;
+        }
+    }
+
+    public TargetLeaseGrant RenewAtLeast(
+        string leaseId,
+        int minimumTtlMs)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(leaseId);
+
+        var minimumTtl = ValidateTtl(minimumTtlMs);
+        var now = _clock();
+
+        lock (_gate)
+        {
+            ExpireIfNeeded(now);
+            var active = RequireActiveLease();
+
+            if (!TokenEquals(active.LeaseId, leaseId))
+                throw LeaseMismatch();
+
+            var minimumExpiresAt =
+                now.AddMilliseconds(minimumTtl);
+            var expiresAt =
+                active.ExpiresAt >= minimumExpiresAt
+                    ? active.ExpiresAt
+                    : minimumExpiresAt;
+
+            var grant = new TargetLeaseGrant(
+                active.LeaseId,
+                active.AcquiredAt,
+                expiresAt);
 
             _active = new ActiveLease(
                 grant.LeaseId,

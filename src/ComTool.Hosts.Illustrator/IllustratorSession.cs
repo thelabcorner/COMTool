@@ -29,8 +29,16 @@ internal sealed class IllustratorSession : IHostSession
             IllustratorStructureOperations.LayerReadOperation
         };
 
+    private static readonly HashSet<string> ActionOperationNames =
+        new(StringComparer.Ordinal)
+        {
+            IllustratorActionRun.Operation
+        };
+
     private object? _appObject;
     private readonly Func<object, string, int, string> _scriptExecutor;
+    private readonly IllustratorDebugSessionManager _debugger;
+    private readonly IllustratorPluginDebugManager _pluginDebug;
 
     public IllustratorSession(
         HostTargetIdentity identity,
@@ -46,6 +54,12 @@ internal sealed class IllustratorSession : IHostSession
                     application,
                     source,
                     executionMode));
+        _debugger =
+            new IllustratorDebugSessionManager(identity);
+        _pluginDebug =
+            new IllustratorPluginDebugManager(
+                identity,
+                new AipDebugCtlClient());
     }
 
     public HostTargetIdentity Identity { get; }
@@ -70,6 +84,22 @@ internal sealed class IllustratorSession : IHostSession
                     "Preconditions and postconditions require runtime-supervisor orchestration."));
         }
 
+        if (request.Policy?.RetryBudgetMs is { } retryBudgetMs &&
+            !OperationPolicy.IsValidRetryBudget(retryBudgetMs))
+        {
+            return ValueTask.FromResult(
+                InvalidRequest(
+                    request,
+                    "invalid_retry_budget",
+                    $"{nameof(OperationPolicy.RetryBudgetMs)} must be between " +
+                    $"{OperationPolicy.MinRetryBudgetMs} and " +
+                    $"{OperationPolicy.MaxRetryBudgetMs} ms."));
+        }
+
+        using var retryBudgetScope =
+            IllustratorComInterop.PushRetryBudget(
+                request.Policy?.RetryBudgetMs);
+
         var started = Stopwatch.StartNew();
         try
         {
@@ -79,11 +109,40 @@ internal sealed class IllustratorSession : IHostSession
                 "core.target.snapshot" => Snapshot(request),
                 "com.get" => ComGet(request),
                 "com.call.read" => ComCallRead(request),
+                IllustratorComMutationBridge.SetOperation => ComSet(request),
+                IllustratorComMutationBridge.CallOperation => ComCall(request),
+                IllustratorPluginMessage.Operation => PluginMessage(request),
+                IllustratorPluginDebugManager.DiagnosticsOperation or
+                IllustratorPluginDebugManager.ControlOperation =>
+                    _pluginDebug.Execute(
+                        request,
+                        GetApp(),
+                        cancellationToken),
+                IllustratorMenuCommand.ExecuteOperation => MenuCommand(request),
+                IllustratorDebugSessionManager.OpenOperation or
+                IllustratorDebugSessionManager.StatusOperation or
+                IllustratorDebugSessionManager.CommandOperation or
+                IllustratorDebugSessionManager.CloseOperation =>
+                    _debugger.Execute(request),
+                IllustratorScriptCodecStatus.Operation =>
+                    IllustratorScriptCodecStatus.Execute(
+                        GetApp(),
+                        request,
+                        _scriptExecutor),
                 "script.eval" => ScriptEval(request),
                 IllustratorScriptRunFile.Operation => ScriptRunFile(request),
                 "illustrator.artboard.setName" => ArtboardSetName(request),
+                _ when ActionOperationNames.Contains(
+                    request.Operation) => IllustratorActionRun.Execute(
+                        GetApp(),
+                        request,
+                        cancellationToken),
                 _ when StructureOperationNames.Contains(
                     request.Operation) => IllustratorStructureOperations.Execute(
+                        GetApp(),
+                        request),
+                _ when IllustratorTypedMutationOperations.OperationNames.Contains(
+                    request.Operation) => IllustratorTypedMutationOperations.Execute(
                         GetApp(),
                         request),
                 IllustratorDocumentReadOperation => IllustratorDocumentOperations.ReadState(
@@ -126,6 +185,11 @@ internal sealed class IllustratorSession : IHostSession
                         : TargetState.Known,
                 Error = ex.ToProtocolError(
                     ex.Retryable ? "retry_within_budget" : "inspect_host_state"),
+                // Purely additive. Every status, target state, kind, message,
+                // retryability, and execution value above is still derived
+                // from the exception alone; a host that attaches no evidence
+                // serializes byte-for-byte as before.
+                Evidence = ex.Evidence,
                 Timing = new OperationTiming(
                     ExecuteMs: started.Elapsed.TotalMilliseconds,
                     TotalMs: started.Elapsed.TotalMilliseconds)
@@ -163,6 +227,7 @@ internal sealed class IllustratorSession : IHostSession
 
     public ValueTask DisposeAsync()
     {
+        _debugger.Dispose();
         var app = Interlocked.Exchange(ref _appObject, null);
         IllustratorComInterop.Release(app);
         return ValueTask.CompletedTask;
@@ -183,7 +248,7 @@ internal sealed class IllustratorSession : IHostSession
             userInteractionLevel = ReadInt(() => app.UserInteractionLevel),
             coordinateSystem = ReadInt(() => app.CoordinateSystem),
             freeMemory = ReadOptionalInt(() => app.FreeMemory),
-            documentsCount = ReadInt(() => app.Documents.Count)
+            documentsCount = ReadRequiredCollectionCount(() => app.Documents)
         });
 
         return Success(request, ProtocolValue.From(payload));
@@ -192,7 +257,7 @@ internal sealed class IllustratorSession : IHostSession
     private OperationResult Snapshot(OperationRequest request)
     {
         dynamic app = GetApp();
-        var documentCount = ReadInt(() => app.Documents.Count);
+        var documentCount = ReadRequiredCollectionCount(() => app.Documents);
 
         var application = new
         {
@@ -228,8 +293,8 @@ internal sealed class IllustratorSession : IHostSession
             }
 
             dynamic document = activeDocument;
-            var artboards = ReadArtboards(document);
-            var selection = ReadSelection(document);
+            ArtboardsFingerprint artboards = ReadArtboards(document);
+            IReadOnlyList<object> selection = ReadSelection(document);
 
             var activeDocumentPayload = new
             {
@@ -362,6 +427,57 @@ internal sealed class IllustratorSession : IHostSession
                 "invalid_com_call",
                 ex.Message);
         }
+    }
+
+    private OperationResult ComSet(OperationRequest request)
+    {
+        var plan = IllustratorComMutationBridge.ParseSetInput(
+            request.Input,
+            out var error);
+
+        if (plan is null)
+            return InvalidRequest(request, error!.Kind, error.Message);
+
+        IllustratorComMutationBridge.ApplySet(GetApp(), plan);
+
+        // The dispatched value is echoed, not read back. A verification read
+        // would be a second COM dispatch after a mutation dispatch, which
+        // widens the ambiguity window, so this result must not be read as
+        // proof that the host now holds the value.
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            property = plan.Member,
+            path = plan.Path,
+            value = plan.Value,
+            mutationClass = "external_side_effect"
+        });
+
+        return Success(request, ProtocolValue.From(payload));
+    }
+
+    private OperationResult ComCall(OperationRequest request)
+    {
+        var plan = IllustratorComMutationBridge.ParseCallInput(
+            request.Input,
+            out var error);
+
+        if (plan is null)
+            return InvalidRequest(request, error!.Kind, error.Message);
+
+        var result = IllustratorComMutationBridge.InvokeCall(
+            GetApp(),
+            plan);
+
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            method = plan.Member,
+            path = plan.Path,
+            argumentCount = plan.Args.Length,
+            mutationClass = "external_side_effect",
+            result
+        });
+
+        return Success(request, ProtocolValue.From(payload));
     }
 
     private OperationResult ArtboardSetName(OperationRequest request)
@@ -635,6 +751,98 @@ internal sealed class IllustratorSession : IHostSession
         }
     }
 
+    private OperationResult PluginMessage(OperationRequest request)
+    {
+        PluginMessageRequest parsed;
+        try
+        {
+            parsed = IllustratorPluginMessage.ParseRequest(request.Input);
+        }
+        catch (ArgumentException ex)
+        {
+            return InvalidRequest(
+                request,
+                "invalid_plugin_message",
+                ex.Message);
+        }
+
+        PluginMessageOutcome outcome;
+        try
+        {
+            outcome = IllustratorPluginMessage.Execute(
+                GetApp(),
+                parsed);
+        }
+        catch (PluginMessageResponseTooLargeException ex)
+        {
+            var evidence = JsonSerializer.SerializeToElement(new
+            {
+                plugin = parsed.Plugin,
+                selector = parsed.Selector,
+                inputUtf8Bytes = ex.InputUtf8Bytes,
+                inputSha256 = ex.InputSha256,
+                responseUtf8Bytes = ex.ResponseUtf8Bytes,
+                responseSha256 = ex.ResponseSha256
+            });
+
+            return new OperationResult
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = request.Id,
+                Operation = request.Operation,
+                Ok = false,
+                Status = OperationStatus.Failed,
+                TargetState = TargetState.KnownChanged,
+                Error = new ProtocolError
+                {
+                    Kind = "plugin_response_too_large",
+                    Message = ex.Message,
+                    Retryable = false,
+                    Execution = ExecutionState.Completed,
+                    SuggestedActions =
+                    [
+                        "reduce_plugin_response",
+                        "return_artifact_reference"
+                    ]
+                },
+                Evidence =
+                [
+                    new EvidenceItem(
+                        "plugin.message.provenance",
+                        evidence)
+                ]
+            };
+        }
+
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            plugin = parsed.Plugin,
+            selector = parsed.Selector,
+            response = outcome.Response,
+            inputUtf8Bytes = outcome.InputUtf8Bytes,
+            inputSha256 = outcome.InputSha256,
+            responseUtf8Bytes = outcome.ResponseUtf8Bytes,
+            responseSha256 = outcome.ResponseSha256
+        });
+
+        return new OperationResult
+        {
+            ProtocolVersion = ProtocolVersion.Current,
+            Id = request.Id,
+            Operation = request.Operation,
+            Ok = true,
+            Status = OperationStatus.Completed,
+            TargetState = TargetState.KnownChanged,
+            Result = ProtocolValue.From(payload)
+        };
+    }
+
+    private OperationResult MenuCommand(OperationRequest request) =>
+        IllustratorMenuCommand.Execute(
+            GetApp(),
+            request,
+            hostVersion: Identity.HostVersion);
+
     private OperationResult ScriptEval(OperationRequest request)
     {
         ScriptEvalRequest parsed;
@@ -724,9 +932,13 @@ internal sealed class IllustratorSession : IHostSession
             if (artboardsObject is null)
                 return new ArtboardsFingerprint(null, null);
 
+            var count = ReadCollectionCountValue(artboardsObject);
+            if (artboardsObject is Array)
+                return new ArtboardsFingerprint(count, null);
+
             dynamic artboards = artboardsObject;
             return new ArtboardsFingerprint(
-                ReadOptionalInt(() => artboards.Count),
+                count,
                 ReadOptionalInt(() => artboards.GetActiveArtboardIndex()));
         }
         finally
@@ -812,16 +1024,46 @@ internal sealed class IllustratorSession : IHostSession
         try
         {
             collectionObject = ReadOptionalObject(collectionGetter);
-            if (collectionObject is null)
-                return null;
-
-            dynamic collection = collectionObject;
-            return ReadOptionalInt(() => collection.Count);
+            return ReadCollectionCountValue(collectionObject);
         }
         finally
         {
             IllustratorComInterop.Release(collectionObject);
         }
+    }
+
+    private static int ReadRequiredCollectionCount(Func<object?> collectionGetter)
+    {
+        object? collectionObject = null;
+        try
+        {
+            collectionObject = IllustratorComInterop.RetryRead(collectionGetter);
+            var count = ReadCollectionCountValue(collectionObject);
+            if (count is not null)
+                return count.Value;
+
+            throw new HostAdapterException(
+                "collection_count_unavailable",
+                "Illustrator collection did not expose a numeric count.",
+                retryable: false,
+                ExecutionState.Started);
+        }
+        finally
+        {
+            IllustratorComInterop.Release(collectionObject);
+        }
+    }
+
+    internal static int? ReadCollectionCountValue(object? collectionObject)
+    {
+        if (collectionObject is null)
+            return null;
+
+        if (collectionObject is Array array)
+            return array.Length;
+
+        dynamic collection = collectionObject;
+        return ReadOptionalInt(() => collection.Count);
     }
 
     private static object? ReadOptionalObject(Func<object?> getter)

@@ -8,6 +8,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets\eson-runtime.js"
                       LogicalName="ComTool.Hosts.Illustrator.Assets.eson-runtime.js" />
+    <EmbeddedResource Include="Assets\esd-debugger-bridge.mjs"
+                      LogicalName="ComTool.Hosts.Illustrator.Assets.esd-debugger-bridge.mjs" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -18,7 +20,7 @@
 
   <Target Name="VerifyCanonicalEsonRuntime"
           BeforeTargets="BeforeBuild"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\..\..\..\eson\dist\vendor-eson-runtime.js')">
+          Condition="Exists('$(MSBuildProjectDirectory)\..\..\..\eson\dist\vendor-eson-runtime.js')">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\scripts\sync-eson.ps1&quot; -Check"
           WorkingDirectory="$(MSBuildProjectDirectory)\..\.." />
   </Target>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ComTool.Protocol\ComTool.Protocol.csproj" />
+    <ProjectReference Include="..\ComTool.Hosts.Abstractions\ComTool.Hosts.Abstractions.csproj" />
+    <ProjectReference Include="..\ComTool.Runtime\ComTool.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embedded so the runtime stays self-contained and executable-first: no
+         pack file has to be resolvable next to the binary. A newer pack can
+         still be supplied on disk without rebuilding. -->
+    <EmbeddedResource Include="Assets\illustrator-com.knowledge-pack"
+                      LogicalName="ComTool.Knowledge.Assets.illustrator-com.knowledge-pack" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,735 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "comparisonModel": "Neither side is byte-compared. Both envelopes are projected onto the nine canonical semantic fields, and every field is then explicitly accounted for: either it is listed in `equivalence` (and must match) or it appears in `divergences` (and must equal the observed pair). An unaccounted field is a harness finding, not a silent pass.",
+    "projectionFields": [
+      "outcome",
+      "payloadKind",
+      "valueType",
+      "hostFailureIdentified",
+      "retryable",
+      "execution",
+      "targetIdentity",
+      "targetState",
+      "recoverableSuggestion"
+    ],
+    "fieldDerivation": {
+      "outcome": "V1: envelope.ok. V2: result.ok.",
+      "payloadKind": "none when no result payload. artifact_reference for the legacy temp-file offload stub ({path,bytes}). V2 uses result.kind object|array for structure, otherwise scalar.",
+      "valueType": "JSON value kind of the result payload; V2 uses result.kind.",
+      "hostFailureIdentified": "true when the failure is attributable to a host condition: V1 needs a non-null hresult or a nested _error object in a success payload; V2 needs error.hResult or status host_busy|target_unavailable.",
+      "retryable": "Derived only from an explicit retryable field. V1 has none, so legacy always projects absent. Absent is a real semantic answer, not a missing measurement.",
+      "execution": "Derived only from an explicit execution field. V1 has none, so legacy always projects absent.",
+      "targetIdentity": "strong when the request carries a target with a generation. V1 requests are null, so legacy always projects absent.",
+      "targetState": "Explicit targetState field. V1 has none, so legacy always projects absent.",
+      "recoverableSuggestion": "true when the envelope carries actionable recovery guidance: V1 suggestion or lock metadata, V2 error.suggestedActions."
+    },
+    "capabilityEquivalent": "Judged on whether the caller can still reach the same intent, not on envelope similarity. false means the legacy semantics are unsafe enough that V2 must not reproduce them, and the case documents a property V1 could not express.",
+    "provenance": {
+      "synthetic_from_source_contract": "Both samples are minimal instances that conform to the shape pinned by the named source file. They are not captured live output.",
+      "recorded_evidence_file": "The sample is a shape recorded from a real run."
+    }
+  },
+  "cases": [
+    {
+      "name": "status/read-success",
+      "surface": "status",
+      "capabilityEquivalent": true,
+      "rationale": "Both sides read host liveness, version identity, and the active-document summary. The payload is a structure in both projections; only the target binding and target state are new in V2.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/envelope.py::_ok and comtool/status_ops.py::_status",
+        "v2Source": "src/ComTool.Protocol/OperationResult.cs + src/ComTool.Protocol/TargetRef.cs"
+      },
+      "v1": {
+        "request": null,
+        "envelope": {
+          "ok": true,
+          "op": "status",
+          "result": {
+            "JsonLane": "es3",
+            "Name": "Adobe Illustrator",
+            "Version": "30.6.0",
+            "BuildNumber": "30.6.0",
+            "DocumentsCount": 2,
+            "ActiveDocument": { "Name": "parity.ai", "Layers": 3, "Artboards": 1 }
+          },
+          "elapsed": 0.412
+        }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-status-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "core.target.status",
+          "input": {}
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-status-1",
+          "operation": "core.target.status",
+          "ok": true,
+          "status": "completed",
+          "targetState": "known",
+          "result": { "kind": "object", "value": { "version": "30.6.0", "documents": 2 } }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "payloadKind",
+        "valueType",
+        "hostFailureIdentified",
+        "retryable",
+        "execution",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "V2 binds every host read to a PID plus start-time generation, so a recycled PID cannot be served a stale generation." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "V2 reports target liveness as a first-class field instead of leaving the caller to infer it from a missing document." }
+      ],
+      "intentionalIncompatibilities": []
+    },
+    {
+      "name": "status/host-failure",
+      "surface": "status",
+      "capabilityEquivalent": true,
+      "rationale": "Both sides report a host-busy failure with a host HRESULT. V2 additionally separates retryability from execution certainty, which the legacy envelope could not express at all.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/envelope.py::_error",
+        "v2Source": "src/ComTool.Protocol/ProtocolError.cs + src/ComTool.Protocol/ProtocolEnums.cs"
+      },
+      "v1": {
+        "request": null,
+        "envelope": {
+          "ok": false,
+          "op": "status",
+          "error": "The operation is busy.",
+          "hresult": -2147467263,
+          "suggestion": "Retry after the current action completes.",
+          "elapsed": 0.9
+        }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-status-2",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "core.target.status",
+          "input": {}
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-status-2",
+          "operation": "core.target.status",
+          "ok": false,
+          "status": "host_busy",
+          "targetState": "busy",
+          "error": {
+            "kind": "host_busy",
+            "message": "The operation is busy.",
+            "retryable": true,
+            "execution": "not_started",
+            "hResult": -2147467263,
+            "hResultHex": "0x8001010A",
+            "suggestedActions": ["Retry after the current action completes."]
+          }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "payloadKind",
+        "valueType",
+        "hostFailureIdentified",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "retryable", "v1": "absent", "v2": "true", "reason": "Retryability becomes an explicit orthogonal field instead of being guessed from the message text." },
+        { "field": "execution", "v1": "absent", "v2": "not_started", "reason": "Execution certainty is explicit, so a caller can prove the host call was never made." },
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "Strong target binding on every host read." },
+        { "field": "targetState", "v1": "absent", "v2": "busy", "reason": "Busy is reported as target state rather than only as an HRESULT." }
+      ],
+      "intentionalIncompatibilities": []
+    },
+    {
+      "name": "status/partial-host-failure-is-not-success",
+      "surface": "status",
+      "capabilityEquivalent": false,
+      "rationale": "Legacy status can return ok:true while embedding a COM failure under an individual field. V2 intentionally fails the whole required status read instead of making the caller inspect nested sentinel objects to discover that the observation is incomplete.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/status_ops.py::_status and comtool/envelope.py::_ok",
+        "v2Source": "src/ComTool.Hosts.Illustrator/IllustratorSession.cs::Status + ExecuteAsync HostAdapterException mapping"
+      },
+      "v1": {
+        "request": null,
+        "envelope": {
+          "ok": true,
+          "op": "status",
+          "result": {
+            "Name": "Adobe Illustrator",
+            "Version": {
+              "_error": "The operation is busy.",
+              "hresult": -2147418111
+            },
+            "DocumentsCount": 2
+          },
+          "elapsed": 0.41
+        }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-status-partial-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "core.target.status",
+          "input": {}
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-status-partial-1",
+          "operation": "core.target.status",
+          "ok": false,
+          "status": "host_busy",
+          "targetState": "busy",
+          "error": {
+            "kind": "host_busy",
+            "message": "The operation is busy.",
+            "retryable": true,
+            "execution": "not_started",
+            "hResult": -2147418111,
+            "suggestedActions": ["retry_within_budget"]
+          }
+        }
+      },
+      "equivalence": [
+        "hostFailureIdentified"
+      ],
+      "divergences": [
+        { "field": "outcome", "v1": "success", "v2": "failure", "reason": "V2 refuses to label an incomplete required status observation successful." },
+        { "field": "payloadKind", "v1": "structure", "v2": "none", "reason": "V1 returns a partial structure containing an error sentinel; V2 returns no success payload on the failed read." },
+        { "field": "valueType", "v1": "object", "v2": "none", "reason": "The legacy partial object is deliberately not reproduced as a successful V2 value." },
+        { "field": "retryable", "v1": "absent", "v2": "true", "reason": "V2 states retryability explicitly instead of hiding a busy HRESULT in a nested field." },
+        { "field": "execution", "v1": "absent", "v2": "not_started", "reason": "V2 preserves execution certainty for a rejected read." },
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "The failed observation remains bound to the exact host generation." },
+        { "field": "targetState", "v1": "absent", "v2": "busy", "reason": "Busy is a first-class target state instead of a nested sentinel." },
+        { "field": "recoverableSuggestion", "v1": "false", "v2": "true", "reason": "V2 supplies explicit bounded-retry guidance." }
+      ],
+      "intentionalIncompatibilities": [
+        "V2 does not preserve legacy ok:true envelopes that contain nested per-field COM failures."
+      ]
+    },
+    {
+      "name": "snapshot/read-success",
+      "surface": "snapshot",
+      "capabilityEquivalent": true,
+      "rationale": "Both sides return one bounded observation of application, active document, and selection. The legacy wrapper could report an inner JSX failure as an outer success; the V2 projection carries a single completed status for the whole observation.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/status_ops.py::_snapshot and comtool/envelope.py::_ok",
+        "v2Source": "src/ComTool.Protocol/OperationResult.cs; facet ISnapshotProvider"
+      },
+      "v1": {
+        "request": null,
+        "envelope": {
+          "ok": true,
+          "op": "snapshot",
+          "result": {
+            "application": { "name": "Adobe Illustrator", "version": "30.6.0", "documents": 1 },
+            "document": { "name": "parity.ai", "saved": true, "layers": 3, "artboards": 1, "pageItems": 12 },
+            "selection": []
+          },
+          "elapsed": 0.7
+        }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-snapshot-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "core.target.snapshot",
+          "input": {}
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-snapshot-1",
+          "operation": "core.target.snapshot",
+          "ok": true,
+          "status": "completed",
+          "targetState": "known",
+          "result": {
+            "kind": "object",
+            "value": {
+              "application": { "name": "Adobe Illustrator", "version": "30.6.0", "documents": 1 },
+              "document": { "name": "parity.ai", "saved": true, "layers": 3, "artboards": 1, "pageItems": 12 },
+              "selection": []
+            }
+          }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "payloadKind",
+        "valueType",
+        "hostFailureIdentified",
+        "retryable",
+        "execution",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "Snapshot is bound to a specific host generation." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "Target liveness accompanies the snapshot." }
+      ],
+      "intentionalIncompatibilities": [
+        "The matrix names host.snapshot; the registered operation is core.target.snapshot provided through ISnapshotProvider. Naming drift, not a capability gap."
+      ]
+    },
+    {
+      "name": "snapshot/inner-failure-is-not-outer-success",
+      "surface": "snapshot",
+      "capabilityEquivalent": false,
+      "rationale": "Legacy snapshot can return an inner {ok:false,raw:...} object through the ordinary success envelope when JSX output cannot be decoded. V2's COM-only snapshot path has one canonical operation result and reports a failed observation as an outer failure.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/status_ops.py::_snapshot and comtool/envelope.py::_ok",
+        "v2Source": "src/ComTool.Hosts.Illustrator/IllustratorSession.cs::Snapshot + ExecuteAsync HostAdapterException mapping"
+      },
+      "v1": {
+        "request": null,
+        "envelope": {
+          "ok": true,
+          "op": "snapshot",
+          "result": {
+            "ok": false,
+            "raw": "{malformed"
+          },
+          "elapsed": 0.73
+        }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-snapshot-failure-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "core.target.snapshot",
+          "input": {}
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-snapshot-failure-1",
+          "operation": "core.target.snapshot",
+          "ok": false,
+          "status": "failed",
+          "targetState": "known",
+          "error": {
+            "kind": "snapshot_read_failed",
+            "message": "The snapshot observation failed.",
+            "retryable": false,
+            "execution": "started",
+            "suggestedActions": ["inspect_host_state"]
+          }
+        }
+      },
+      "equivalence": [
+        "hostFailureIdentified"
+      ],
+      "divergences": [
+        { "field": "outcome", "v1": "success", "v2": "failure", "reason": "V2 never wraps a failed snapshot observation in an outer success." },
+        { "field": "payloadKind", "v1": "structure", "v2": "none", "reason": "The legacy inner failure object is not a successful snapshot payload in V2." },
+        { "field": "valueType", "v1": "object", "v2": "none", "reason": "V2 carries failure in the canonical error envelope rather than as a result object." },
+        { "field": "retryable", "v1": "absent", "v2": "false", "reason": "Retryability is explicit in V2." },
+        { "field": "execution", "v1": "absent", "v2": "started", "reason": "V2 records that the host observation had begun before failure." },
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "The failed observation is pinned to one host generation." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "A snapshot failure is not conflated with losing the target generation." },
+        { "field": "recoverableSuggestion", "v1": "false", "v2": "true", "reason": "V2 supplies an explicit inspection action." }
+      ],
+      "intentionalIncompatibilities": [
+        "V2 rejects the legacy double-envelope pattern where a failed snapshot value is returned under ok:true."
+      ]
+    },
+    {
+      "name": "com-get/read-scalar",
+      "surface": "get <path>",
+      "capabilityEquivalent": true,
+      "rationale": "A single dotted-path COM property read. Both sides project to a scalar string; the V2 value is carried as an explicit typed value rather than an untyped JSON leaf.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/bridge.py::ComBridge.get and comtool/envelope.py::_ok",
+        "v2Source": "src/ComTool.Protocol/ProtocolValue.cs; operation com.get"
+      },
+      "v1": {
+        "request": null,
+        "envelope": { "ok": true, "op": "get", "result": "30.6.0", "elapsed": 0.031 }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-com-get-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "com.get",
+          "input": { "path": "Version" }
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-com-get-1",
+          "operation": "com.get",
+          "ok": true,
+          "status": "completed",
+          "targetState": "known",
+          "result": { "kind": "string", "value": "30.6.0" }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "payloadKind",
+        "valueType",
+        "hostFailureIdentified",
+        "retryable",
+        "execution",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "Every COM read is generation-bound." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "Target liveness is reported with the read." }
+      ],
+      "intentionalIncompatibilities": []
+    },
+    {
+      "name": "com-call/read-count",
+      "surface": "call <path> [args]",
+      "capabilityEquivalent": true,
+      "rationale": "A read-classified COM method call. Both sides project to a scalar number. The read lane is the only generic call surface V2 registers, so this fixture pins the surviving capability, not the dropped arbitrary-invocation lane.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/bridge.py::ComBridge.call and comtool/envelope.py::_ok",
+        "v2Source": "src/ComTool.Protocol/ProtocolValue.cs; operation com.call.read"
+      },
+      "v1": {
+        "request": null,
+        "envelope": { "ok": true, "op": "call", "result": 3, "elapsed": 0.044 }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-com-call-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "com.call.read",
+          "input": { "path": "ActiveDocument.Artboards.Count" }
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-com-call-1",
+          "operation": "com.call.read",
+          "ok": true,
+          "status": "completed",
+          "targetState": "known",
+          "result": { "kind": "number", "value": 3 }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "payloadKind",
+        "valueType",
+        "hostFailureIdentified",
+        "retryable",
+        "execution",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "Every COM call is generation-bound." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "Target liveness is reported with the call." }
+      ],
+      "intentionalIncompatibilities": [
+        "Mutation risk comes from the runtime-owned operation, not from the method name.",
+        "Only the read-classified lane is registered; there is no arbitrary mutating com.call lane."
+      ]
+    },
+    {
+      "name": "script-eval/int-result",
+      "surface": "eval --expr/--code",
+      "capabilityEquivalent": true,
+      "rationale": "A simple arithmetic script. Both sides project to a scalar number. The V2 value carries an explicit kind so a JSON-looking result string cannot lose its type identity.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/jsx_engine.py plus comtool/envelope.py::_ok",
+        "v2Source": "src/ComTool.Protocol/ProtocolValue.cs; operation script.eval"
+      },
+      "v1": {
+        "request": null,
+        "envelope": { "ok": true, "op": "eval", "result": 2, "elapsed": 0.12 }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-eval-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "script.eval",
+          "input": { "code": "1+1" }
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-eval-1",
+          "operation": "script.eval",
+          "ok": true,
+          "status": "completed",
+          "targetState": "known",
+          "result": { "kind": "number", "value": 2 }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "payloadKind",
+        "valueType",
+        "hostFailureIdentified",
+        "retryable",
+        "execution",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "Script execution is bound to a host generation and runs under a lease." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "Target liveness accompanies the script result." }
+      ],
+      "intentionalIncompatibilities": [
+        "A result string that merely looks like JSON is never reinterpreted as JSON."
+      ]
+    },
+    {
+      "name": "script-eval/runtime-error",
+      "surface": "eval --expr/--code",
+      "capabilityEquivalent": true,
+      "rationale": "A script that throws. Both sides report a plain failure with no host fault attributed, but only V2 can state that the script body did execute and complete.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/envelope.py::_error (context field)",
+        "v2Source": "src/ComTool.Protocol/ProtocolError.cs ExecutionState=completed"
+      },
+      "v1": {
+        "request": null,
+        "envelope": {
+          "ok": false,
+          "op": "eval",
+          "error": "The script threw.",
+          "context": { "line": 1, "excerpt": "throw new Error('boom');" },
+          "elapsed": 0.2
+        }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-eval-2",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "script.eval",
+          "input": { "code": "throw new Error('boom');" }
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-eval-2",
+          "operation": "script.eval",
+          "ok": false,
+          "status": "failed",
+          "targetState": "known",
+          "error": {
+            "kind": "script_error",
+            "message": "The script threw.",
+            "retryable": false,
+            "execution": "completed"
+          }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "payloadKind",
+        "valueType",
+        "hostFailureIdentified",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "retryable", "v1": "absent", "v2": "false", "reason": "V2 states that a script throw is not retryable instead of leaving the caller to guess." },
+        { "field": "execution", "v1": "absent", "v2": "completed", "reason": "The legacy envelope cannot distinguish a completed body from a never-dispatched call; V2 can." },
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "Generation-bound execution." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "Target liveness accompanies the failure." }
+      ],
+      "intentionalIncompatibilities": []
+    },
+    {
+      "name": "script-eval/ambiguous-outcome",
+      "surface": "eval --expr/--code",
+      "capabilityEquivalent": false,
+      "rationale": "This is the case where the legacy abstraction is genuinely unsafe. The legacy tool reports a local deadline as a host fault and advises a re-run, which cannot distinguish never-executed from executed-with-unknown-outcome and can double-apply a mutation. V2 deliberately does not reproduce it, so capabilityEquivalent is false and the case documents a property V1 could not express.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/envelope.py::_error (hresult plus suggestion on a local timeout)",
+        "v2Source": "src/ComTool.Protocol/ProtocolEnums.cs (reconciliation_required, ExecutionState=ambiguous)"
+      },
+      "v1": {
+        "request": null,
+        "envelope": {
+          "ok": false,
+          "op": "eval",
+          "error": "Script did not complete before the deadline.",
+          "hresult": -2147417848,
+          "suggestion": "Re-run the expression.",
+          "elapsed": 30.0
+        }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-eval-3",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "script.eval",
+          "input": { "code": "app.activeDocument.save();" },
+          "policy": { "onAmbiguous": "reconcile" }
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-eval-3",
+          "operation": "script.eval",
+          "ok": false,
+          "status": "reconciliation_required",
+          "targetState": "reconciliation_required",
+          "error": {
+            "kind": "ambiguous_mutation",
+            "message": "The script was dispatched and its outcome is not provable.",
+            "retryable": false,
+            "execution": "ambiguous"
+          }
+        }
+      },
+      "equivalence": ["outcome", "payloadKind", "valueType"],
+      "divergences": [
+        { "field": "hostFailureIdentified", "v1": "true", "v2": "false", "reason": "The legacy tool blamed the host for what was a local deadline. V2 reports the host as healthy and the outcome as unknown." },
+        { "field": "retryable", "v1": "absent", "v2": "false", "reason": "A possible mutation with an unknown outcome is not retryable, which the legacy advice implied it was." },
+        { "field": "execution", "v1": "absent", "v2": "ambiguous", "reason": "This is the decisive field: V2 states that dispatch may already have happened." },
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "Reconciliation is scoped to one host generation." },
+        { "field": "targetState", "v1": "absent", "v2": "reconciliation_required", "reason": "The host is marked as requiring explicit reconciliation rather than merely retried." },
+        { "field": "recoverableSuggestion", "v1": "true", "v2": "false", "reason": "V2 withholds a re-run suggestion because re-running a possible mutation is exactly the unsafe action; recovery is an explicit reconciliation operation instead." }
+      ],
+      "intentionalIncompatibilities": [
+        "A local timeout is never treated as proof that the host operation did not execute.",
+        "A mutation with an unknown outcome becomes a durable incident; it is never blindly replayed.",
+        "The legacy advice to re-run an expression that may have already saved a document is not reproduced."
+      ]
+    },
+    {
+      "name": "document-lifecycle/close-boolean-policy-dropped",
+      "surface": "close --save Boolean",
+      "capabilityEquivalent": false,
+      "rationale": "The matrix classifies the legacy close surface as drop. Illustrator expects an AiSaveOptions domain value, not a Boolean, and an implicit save or discard default is unsafe. The capability is superseded by an explicit policy vocabulary, so capabilityEquivalent is false.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/documents.py plus comtool/envelope.py::_ok (Boolean save argument)",
+        "v2Source": "src/ComTool.Protocol/ProtocolValue.cs; operation illustrator.document.close"
+      },
+      "v1": {
+        "request": null,
+        "envelope": { "ok": true, "op": "close", "result": "closed", "elapsed": 0.4 }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-close-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "illustrator.document.close",
+          "input": { "policy": "save" }
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-close-1",
+          "operation": "illustrator.document.close",
+          "ok": true,
+          "status": "completed",
+          "targetState": "known",
+          "result": { "kind": "object", "value": { "closed": true, "policy": "save" } }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "hostFailureIdentified",
+        "retryable",
+        "execution",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "payloadKind", "v1": "scalar", "v2": "structure", "reason": "V2 returns the applied close policy so the caller can see what happened instead of inferring it from a success string." },
+        { "field": "valueType", "v1": "string", "v2": "object", "reason": "Same reason: the result is a typed structure, not an opaque string." },
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "Document lifecycle operations are generation-bound and leased." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "Target liveness accompanies a document lifecycle result." }
+      ],
+      "intentionalIncompatibilities": [
+        "The Boolean save argument is dropped; the policy vocabulary is save, discard, prompt, reject_if_dirty.",
+        "A document close is a document_lifecycle mutation under a lease, so it can never be issued as a read-only call.",
+        "The matrix names document.close; the registered operation is illustrator.document.close. Naming drift only."
+      ]
+    },
+    {
+      "name": "debug-command/session-command-shapes",
+      "surface": "debug eval/continue/step/frame/properties",
+      "capabilityEquivalent": true,
+      "rationale": "The debugger command vocabulary survives. Both sides accept a stepOver-style command and confirm it was applied. What changed is ownership: V2 requires a session handle so independent invocations cannot reorder steps against each other.",
+      "provenance": {
+        "v1": "synthetic_from_source_contract",
+        "v2": "synthetic_from_source_contract",
+        "v1Source": "comtool/debug_ops.py plus comtool/envelope.py::_ok (per-invocation REPL)",
+        "v2Source": "src/ComTool.Protocol/OperationResult.cs; operation debug.session.command"
+      },
+      "v1": {
+        "request": null,
+        "envelope": {
+          "ok": true,
+          "op": "debug",
+          "result": { "command": "stepOver", "applied": true },
+          "elapsed": 0.5
+        }
+      },
+      "v2": {
+        "request": {
+          "protocolVersion": 1,
+          "id": "parity-debug-1",
+          "target": { "host": "illustrator", "id": "illustrator:30.6:pid-6740", "generation": 4 },
+          "operation": "debug.session.command",
+          "input": { "sessionId": "dbg-parity-1", "command": "stepOver" }
+        },
+        "result": {
+          "protocolVersion": 1,
+          "id": "parity-debug-1",
+          "operation": "debug.session.command",
+          "ok": true,
+          "status": "completed",
+          "targetState": "known",
+          "result": { "kind": "object", "value": { "command": "stepOver", "applied": true, "sessionId": "dbg-parity-1" } }
+        }
+      },
+      "equivalence": [
+        "outcome",
+        "payloadKind",
+        "valueType",
+        "hostFailureIdentified",
+        "retryable",
+        "execution",
+        "recoverableSuggestion"
+      ],
+      "divergences": [
+        { "field": "targetIdentity", "v1": "absent", "v2": "strong", "reason": "A debug command is bound to one host generation and runs under a lease." },
+        { "field": "targetState", "v1": "absent", "v2": "known", "reason": "Target liveness accompanies the command result." }
+      ],
+      "intentionalIncompatibilities": [
+        "Debugger interaction is stateful by design; a stateless per-invocation command is rejected.",
+        "Session identity is invalidated on host restart rather than reused.",
+        "Bridge startup is watchdog-bounded by the owning session rather than blocking an unbounded client call."
+      ]
+    }
+  ]
+}

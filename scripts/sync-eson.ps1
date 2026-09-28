@@ -27,7 +27,7 @@ function Get-Sha256Hex {
 }
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$scriptsRoot = Resolve-Path (Join-Path $projectRoot "..\..\..")
+$scriptsRoot = Resolve-Path (Join-Path $projectRoot "..")
 $source = Join-Path $scriptsRoot "eson\dist\vendor-eson-runtime.js"
 $destination = Join-Path $projectRoot "src\ComTool.Hosts.Illustrator\Assets\eson-runtime.js"
 $runtimeSource = Join-Path $projectRoot "src\ComTool.Hosts.Illustrator\IllustratorEsonRuntime.cs"

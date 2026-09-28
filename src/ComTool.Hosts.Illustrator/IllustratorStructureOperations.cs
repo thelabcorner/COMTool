@@ -33,7 +33,7 @@ internal static class IllustratorStructureOperations
 
     private const int MaxArtboardNameChars = 4_096;
     private const int MaxLayerNameChars = 4_096;
-    private const int MaxUuidChars = 4_096;
+
 
     private static readonly IReadOnlySet<string> DocumentSelectorProperties =
         new HashSet<string>(StringComparer.Ordinal)
@@ -206,11 +206,6 @@ internal static class IllustratorStructureOperations
                     document.Index,
                     index,
                     "Opacity"),
-                uuid = ReadLayerString(
-                    appObject,
-                    document.Index,
-                    index,
-                    "Uuid"),
                 itemCount = ReadLayerInt(
                     appObject,
                     document.Index,

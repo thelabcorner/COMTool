@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 3,
+  "kind": "comtool-v2-node-sdk-live-package-proof",
+  "date": "2026-09-26",
+  "package": {
+    "version": "0.1.2-dev.20260926.9",
+    "runtimeIdentifier": "win-x64",
+    "sourceCommit": "65ec79f776c8f89eed468401d7c5ca3253434eeb",
+    "sourceDirty": true,
+    "archiveSha256": "febcb1693bdd29eb44b4eb8ef27446463c2ff025d6cac0c00035a2bcc3e30435",
+    "archiveBytes": 38969961,
+    "fileCount": 258,
+    "nodeSdkFileCount": 10,
+    "packageSmokePowerShell51": true,
+    "shippedZipSmokePowerShell51": true,
+    "powerShellVersion": "5.1.22621.6133",
+    "typeDeclarationsShipped": true
+  },
+  "runtime": {
+    "informationalVersion": "0.1.2-dev.20260926.9+65ec79f776c8f89eed468401d7c5ca3253434eeb",
+    "isolatedPipe": "ctv2-sdk-session-live-dev9",
+    "isolatedStateRoot": true,
+    "stoppedAfterProof": true
+  },
+  "target": {
+    "host": "illustrator",
+    "hostVersion": "30.6.0",
+    "targetId": "illustrator:775050e0d6dee8a3d8dd098a",
+    "processId": 45960,
+    "processStartedAt": "2026-09-26T14:16:01.9806023-05:00"
+  },
+  "session": {
+    "api": "ComToolRunner.openSession -> ComToolTargetSession",
+    "strongTargetDiscovered": true,
+    "targetReusedAcrossOperations": true,
+    "refreshTargetPassed": true,
+    "genericTargetBoundExecuteAvailable": true,
+    "leaseManagementExplicit": true,
+    "genericReconcilePassed": true,
+    "durableMutationReconciliationHelpersWireTested": true,
+    "incidentResolutionHelpersWireTested": true,
+    "readConveniences": [
+      "status",
+      "snapshot",
+      "capabilities",
+      "comGet",
+      "comCallRead"
+    ],
+    "reconciliationConveniences": [
+      "refreshTarget",
+      "reconcile",
+      "reconcileMutation",
+      "resolveIncident"
+    ],
+    "scriptConveniences": [
+      "runEval",
+      "testEval",
+      "runFile",
+      "testFile"
+    ]
+  },
+  "typescript": {
+    "declarationFile": "sdk/node/index.d.ts",
+    "packageExportsTypesCondition": true,
+    "strictNodeNextConsumerSmokePassed": true,
+    "runtimeDependencyAdded": false
+  },
+  "liveProof": {
+    "operations": [
+      "core.runtime.health",
+      "core.targets.list",
+      "core.target.status",
+      "core.target.snapshot",
+      "core.target.lease.acquire",
+      "core.target.reconcile",
+      "script.eval",
+      "core.target.lease.release"
+    ],
+    "status": {
+      "ok": true,
+      "documentsCount": 1
+    },
+    "snapshot": {
+      "ok": true,
+      "documentsCount": 1,
+      "activeDocumentName": "Untitled-1",
+      "layersCount": 1,
+      "artboardsCount": 2,
+      "pageItemsCount": 0,
+      "pathItemsCount": 0,
+      "selectionCount": 0,
+      "systemArrayCollectionRegressionFixed": true
+    },
+    "reconcile": {
+      "ok": true,
+      "status": "completed",
+      "targetState": "known",
+      "reconciled": true,
+      "evidenceKind": "host.heartbeat"
+    },
+    "testEval": {
+      "requestId": "dev9-session-test-eval",
+      "sourceSha256": "be20d9eabd5e664b327bb5e311f295ae535b18dee2a5f0b764b0e2d7da913cbe",
+      "sourceChars": 3,
+      "expectedValue": 42,
+      "actualValue": 42,
+      "classification": "completed",
+      "exitCode": 0,
+      "operation": "script.eval",
+      "executeMs": 37.8025,
+      "totalMs": 69.2298,
+      "wallMs": 73.1662
+    },
+    "timingsMs": {
+      "health": 254.1651,
+      "targetDiscovery": 3190.8789,
+      "refreshTarget": 1.5937,
+      "status": 4086.5828,
+      "snapshot": 7671.3815,
+      "leaseAcquire": 16.1146,
+      "reconcile": 27.3573,
+      "testEval": 73.1662,
+      "leaseRelease": 3.281
+    }
+  },
+  "lease": {
+    "acquired": true,
+    "ttlMs": 180000,
+    "released": true,
+    "boundAfterRelease": null,
+    "leaseIdRecorded": false
+  },
+  "safety": {
+    "documentMutationUsed": false,
+    "sourceBodyPersisted": false,
+    "scriptReplayUsed": false,
+    "breakGlassRecoveryUsed": false,
+    "installedRuntimeModified": false,
+    "illustratorProcessTerminated": false
+  }
+}

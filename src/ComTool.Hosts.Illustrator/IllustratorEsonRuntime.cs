@@ -9,7 +9,7 @@ internal static class IllustratorEsonRuntime
         "ComTool.Hosts.Illustrator.Assets.eson-runtime.js";
 
     internal const string ExpectedSha256 =
-        "31ee6046390589fabcc8a574c0b1fad50684912ae1d04682f026f95a9e7750fc";
+        "51ce10b9a08fae7cfba495e264c4a87607c1a104c8b18b44f1b77e863fc24558";
 
     private static readonly Lazy<string> SourceLazy =
         new(LoadAndVerify, isThreadSafe: true);

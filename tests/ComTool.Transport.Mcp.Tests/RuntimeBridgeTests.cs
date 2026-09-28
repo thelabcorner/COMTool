@@ -131,6 +131,36 @@ public sealed class RuntimeBridgeTests
     }
 
     [Fact]
+    public async Task InvalidRetryBudgetIsRejectedBeforeTransport()
+    {
+        var bridge = new RuntimeBridge();
+
+        var json = await bridge.ExecuteAsync(
+            "script.eval",
+            "null",
+            "mcp-bad-retry-budget",
+            leaseId:
+                "lease_abcdefghijklmnopqrstuvwxyz123456",
+            targetHost: "illustrator",
+            targetId: "illustrator:abc",
+            None,
+            retryBudgetMs: -1,
+            pipeName:
+                $"comtool-v2-mcp-test-{Guid.NewGuid():N}");
+
+        var result = ProtocolJson.DeserializeResult(json);
+
+        Assert.False(result.Ok);
+        Assert.Equal(OperationStatus.InvalidRequest, result.Status);
+        Assert.Equal(
+            "invalid_retry_budget",
+            result.Error?.Kind);
+        Assert.Equal(
+            ExecutionState.NotStarted,
+            result.Error?.Execution);
+    }
+
+    [Fact]
     public async Task GeneratedRequestIdIsStableWithinSingleCall()
     {
         var bridge = new RuntimeBridge();
@@ -150,5 +180,70 @@ public sealed class RuntimeBridgeTests
 
         Assert.False(string.IsNullOrWhiteSpace(id));
         Assert.StartsWith("mcp-", id, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConditionJsonUsesCanonicalProtocolValidationBeforeTransport()
+    {
+        var bridge = new RuntimeBridge();
+        const string invalidPreconditions =
+            """
+            [
+              {
+                "id":"document-open",
+                "source":{"operation":"com.get","input":{"path":"ActiveDocument.Name"}},
+                "predicate":{"kind":"unsupported"}
+              }
+            ]
+            """;
+
+        var json = await bridge.ExecuteAsync(
+            "script.eval",
+            """{"kind":"expression","source":"1","effects":"read_only"}""",
+            "mcp-condition-validation",
+            leaseId: null,
+            targetHost: "illustrator",
+            targetId: "illustrator:test",
+            None,
+            preconditionsJson: invalidPreconditions,
+            pipeName: $"comtool-v2-mcp-test-{Guid.NewGuid():N}");
+
+        var result = ProtocolJson.DeserializeResult(json);
+
+        Assert.False(result.Ok);
+        Assert.Equal(OperationStatus.InvalidRequest, result.Status);
+        Assert.Equal(
+            "invalid_condition_predicate",
+            result.Error?.Kind);
+        Assert.Equal(
+            ExecutionState.NotStarted,
+            result.Error?.Execution);
+    }
+
+    [Fact]
+    public async Task MalformedConditionJsonIsRejectedBeforeTransport()
+    {
+        var bridge = new RuntimeBridge();
+
+        var json = await bridge.ExecuteAsync(
+            "script.eval",
+            "null",
+            "mcp-condition-json",
+            leaseId: null,
+            targetHost: "illustrator",
+            targetId: "illustrator:test",
+            None,
+            postconditionsJson: "{not-an-array}",
+            pipeName: $"comtool-v2-mcp-test-{Guid.NewGuid():N}");
+
+        var result = ProtocolJson.DeserializeResult(json);
+
+        Assert.False(result.Ok);
+        Assert.Equal(OperationStatus.InvalidRequest, result.Status);
+        Assert.Equal("invalid_json", result.Error?.Kind);
+        Assert.Contains(
+            "postconditionsJson",
+            result.Error?.Message ?? string.Empty,
+            StringComparison.Ordinal);
     }
 }

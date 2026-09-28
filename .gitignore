@@ -1,7 +1,10 @@
 .dotnet/
 .bootstrap/
 **/bin/
+!sdk/node/bin/
+!sdk/node/bin/**
 **/obj/
 .artifacts/
 *.user
 *.suo
+*.log

@@ -29,7 +29,7 @@ internal static class IllustratorComReadBridge
 
     public static JsonElement Get(object root, string path)
     {
-        var segments = ParsePath(path);
+        var segments = ComAutomationPath.ParseRead(path);
         object current = root;
         var ownsCurrent = false;
 
@@ -87,7 +87,7 @@ internal static class IllustratorComReadBridge
         string path,
         JsonElement argsElement)
     {
-        var segments = ParsePath(path);
+        var segments = ComAutomationPath.ParseRead(path);
         var final = segments[^1];
 
         if (final.Index is not null)
@@ -423,64 +423,6 @@ internal static class IllustratorComReadBridge
         }
     }
 
-    private static Segment[] ParsePath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("COM path must be non-empty.", nameof(path));
-
-        var rawSegments = path.Split('.', StringSplitOptions.None);
-        if (rawSegments.Any(static segment => segment.Length == 0))
-            throw new ArgumentException(
-                "COM path cannot contain empty segments.",
-                nameof(path));
-
-        var result = new Segment[rawSegments.Length];
-
-        for (var i = 0; i < rawSegments.Length; i++)
-            result[i] = ParseSegment(rawSegments[i]);
-
-        return result;
-    }
-
-    private static Segment ParseSegment(string raw)
-    {
-        var name = raw;
-        int? index = null;
-
-        var bracket = raw.IndexOf('[');
-        if (bracket >= 0)
-        {
-            if (!raw.EndsWith(']') ||
-                raw.IndexOf('[', bracket + 1) >= 0)
-            {
-                throw new ArgumentException(
-                    $"Invalid COM path segment '{raw}'.");
-            }
-
-            name = raw[..bracket];
-            var indexText = raw[(bracket + 1)..^1];
-
-            if (!int.TryParse(indexText, out var parsedIndex) ||
-                parsedIndex < 0)
-            {
-                throw new ArgumentException(
-                    $"Invalid COM index in segment '{raw}'.");
-            }
-
-            index = parsedIndex;
-        }
-
-        if (name.Length == 0 ||
-            !(char.IsLetter(name[0]) || name[0] == '_') ||
-            name.Skip(1).Any(static ch =>
-                !(char.IsLetterOrDigit(ch) || ch == '_')))
-        {
-            throw new ArgumentException(
-                $"Invalid COM path segment '{raw}'.");
-        }
-
-        return new Segment(name, index);
-    }
 
     private static bool IsOwnedTransient(
         object value,
@@ -548,10 +490,6 @@ internal static class IllustratorComReadBridge
             ExecutionState.Started,
             inner.HResult,
             inner);
-
-    private sealed record Segment(
-        string Name,
-        int? Index);
 
     private readonly record struct CallKey(
         string Member,

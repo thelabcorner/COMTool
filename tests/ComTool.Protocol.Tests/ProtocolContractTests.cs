@@ -57,18 +57,42 @@ public sealed class ProtocolContractTests
         Assert.Equal("unsupported_protocol_version", error.Kind);
     }
 
-    [Fact]
-    public void NegativeTimeoutIsRejected()
+    [Theory]
+    [InlineData("queueTimeoutMs")]
+    [InlineData("operationSoftTimeoutMs")]
+    [InlineData("allowReplayAfterAmbiguous")]
+    public void UnimplementedStablePolicyFieldsAreRejected(string fieldName)
     {
-        const string json =
-            """
+        var json = $$"""
             {
               "protocolVersion": 1,
               "id": "req-1",
               "operation": "core.status",
               "input": null,
               "policy": {
-                "retryBudgetMs": -1
+                "{{fieldName}}": 1
+              }
+            }
+            """;
+
+        Assert.Throws<JsonException>(
+            () => ProtocolJson.DeserializeRequest(json));
+    }
+
+    [Theory]
+    [InlineData(99)]
+    [InlineData(3_600_001)]
+    public void WorkerWatchdogOutsideSupportedBoundsIsRejected(
+        int watchdogMs)
+    {
+        var json = $$"""
+            {
+              "protocolVersion": 1,
+              "id": "req-watchdog",
+              "operation": "script.eval",
+              "input": {},
+              "policy": {
+                "workerWatchdogMs": {{watchdogMs}}
               }
             }
             """;
@@ -77,6 +101,87 @@ public sealed class ProtocolContractTests
             () => ProtocolJson.DeserializeRequest(json));
 
         Assert.Equal("invalid_timeout", error.Kind);
+    }
+
+    [Theory]
+    [InlineData(100)]
+    [InlineData(120_000)]
+    [InlineData(3_600_000)]
+    public void WorkerWatchdogAcceptsCallerSuppliedDuration(
+        int watchdogMs)
+    {
+        var json = $$"""
+            {
+              "protocolVersion": 1,
+              "id": "req-watchdog",
+              "operation": "script.eval",
+              "input": {},
+              "policy": {
+                "workerWatchdogMs": {{watchdogMs}}
+              }
+            }
+            """;
+
+        var request = ProtocolJson.DeserializeRequest(json);
+
+        Assert.Equal(
+            watchdogMs,
+            request.Policy?.WorkerWatchdogMs);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(3_600_001)]
+    public void RetryBudgetOutsideSupportedBoundsIsRejected(
+        int retryBudgetMs)
+    {
+        var json = $$"""
+            {
+              "protocolVersion": 1,
+              "id": "req-retry-budget",
+              "operation": "script.eval",
+              "input": {},
+              "policy": {
+                "retryBudgetMs": {{retryBudgetMs}}
+              }
+            }
+            """;
+
+        var error = Assert.Throws<ProtocolValidationException>(
+            () => ProtocolJson.DeserializeRequest(json));
+
+        Assert.Equal("invalid_retry_budget", error.Kind);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2_000)]
+    [InlineData(3_600_000)]
+    public void RetryBudgetAcceptsCallerSuppliedDuration(
+        int retryBudgetMs)
+    {
+        var json = $$"""
+            {
+              "protocolVersion": 1,
+              "id": "req-retry-budget",
+              "operation": "script.eval",
+              "input": {},
+              "policy": {
+                "retryBudgetMs": {{retryBudgetMs}}
+              }
+            }
+            """;
+
+        var request = ProtocolJson.DeserializeRequest(json);
+
+        Assert.Equal(
+            retryBudgetMs,
+            request.Policy?.RetryBudgetMs);
+        Assert.Equal(
+            retryBudgetMs,
+            ProtocolJson.DeserializeRequest(
+                ProtocolJson.Serialize(request))
+                .Policy?.RetryBudgetMs);
     }
 
     [Fact]
@@ -97,9 +202,7 @@ public sealed class ProtocolContractTests
                 "path": "Version"
               },
               "policy": {
-                "queueTimeoutMs": 1000,
-                "retryBudgetMs": 250,
-                "allowReplayAfterAmbiguous": false,
+                "workerWatchdogMs": 5000,
                 "leaseId": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"
               },
               "preconditions": [

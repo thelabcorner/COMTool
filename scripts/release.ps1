@@ -15,6 +15,8 @@ param(
 
     [string]$TimestampUrl = "http://timestamp.digicert.com",
 
+    [string]$AipDebugCtlPath,
+
     [switch]$SkipTests
 )
 
@@ -25,6 +27,15 @@ $RuntimeIdentifierPattern = '^[A-Za-z0-9][A-Za-z0-9.-]*$'
 
 $root = Split-Path -Parent $PSScriptRoot
 $dotnet = Join-Path $PSScriptRoot "dotnet.ps1"
+$defaultAipDebugCtlPath = [IO.Path]::GetFullPath(
+    (Join-Path $root "..\aip-debug\build\Release\aipdebugctl.exe")
+)
+if ([string]::IsNullOrWhiteSpace($AipDebugCtlPath)) {
+    $AipDebugCtlPath = $defaultAipDebugCtlPath
+}
+else {
+    $AipDebugCtlPath = [IO.Path]::GetFullPath($AipDebugCtlPath)
+}
 
 if ([string]::IsNullOrWhiteSpace($Version) -or
     $Version -notmatch $VersionPattern) {
@@ -51,6 +62,9 @@ $zipPath = Join-Path $stagingRoot $zipName
 $sdkArtifactsRoot = Join-Path ([IO.Path]::GetTempPath()) (
     "ctv2-sdk-" + [Guid]::NewGuid().ToString("N")
 )
+$zipVerifyRoot = Join-Path ([IO.Path]::GetTempPath()) (
+    "ctv2-zipverify-" + [Guid]::NewGuid().ToString("N")
+)
 
 function Invoke-Checked {
     param(
@@ -66,15 +80,263 @@ function Invoke-Checked {
     }
 }
 
+function Invoke-PackageVerification {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion,
+        [Parameter(Mandatory = $true)][string]$ExpectedCommit,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    $raw = @(
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (
+            Join-Path $PSScriptRoot "verify-package.ps1"
+        ) -Source $Source -ExpectedVersion $ExpectedVersion 2>&1
+    )
+    $exitCode = $LASTEXITCODE
+    $text = ($raw | ForEach-Object { "$_" }) -join [Environment]::NewLine
+    if ($exitCode -ne 0) {
+        throw ($Description + " failed with exit code " + $exitCode + "." +
+            [Environment]::NewLine + $text)
+    }
+
+    try {
+        $result = $text | ConvertFrom-Json
+    }
+    catch {
+        throw "$Description did not return valid JSON: $text"
+    }
+
+    if (-not [bool]$result.ok -or
+        [string]$result.psVersion -notlike "5.1.*" -or
+        [string]$result.version -ne $ExpectedVersion -or
+        [string]$result.sourceCommit -ne $ExpectedCommit.ToLowerInvariant() -or
+        [string]$result.runtimeInformationalVersion -ne ($ExpectedVersion + "+" + $ExpectedCommit.ToLowerInvariant())) {
+        throw "$Description returned invalid provenance metadata: $text"
+    }
+
+    foreach ($property in @(
+        "stableEntrypoints",
+        "liveRuntimeUninstallRefused",
+        "damagedInstallRepair",
+        "sourceInstallDisjointPreflight",
+        "danglingCurrentInstallRecovered",
+        "stableNativeHelper",
+        "nonJunctionCurrentRefusedBeforeMutation",
+        "poisonedCurrentJunctionRefusedBeforeMutation",
+        "danglingCurrentUninstallAll",
+        "corruptPointerUninstallAll"
+    )) {
+        if (-not [bool]$result.$property) {
+            throw "$Description did not prove '$property': $text"
+        }
+    }
+
+    return $result
+}
+
 function Get-Sha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Invoke-NativeHelperUsageSmoke {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$TimeoutMs = 5000,
+        [int]$MaxOutputBytes = 65536
+    )
+
+    $stdoutPath = [IO.Path]::GetTempFileName()
+    $stderrPath = [IO.Path]::GetTempFileName()
+    $commandPath = Join-Path ([IO.Path]::GetTempPath()) (
+        "comtool-v2-aipdebugctl-" + [Guid]::NewGuid().ToString("N") + ".cmd"
+    )
+    $process = $null
+
+    try {
+        $commandText =
+            "@echo off" + [Environment]::NewLine +
+            '"%COMTOOL_HELPER%" 1>"%COMTOOL_STDOUT%" 2>"%COMTOOL_STDERR%"' +
+            [Environment]::NewLine +
+            "exit /b %ERRORLEVEL%" + [Environment]::NewLine
+        [IO.File]::WriteAllText(
+            $commandPath,
+            $commandText,
+            [Text.Encoding]::ASCII
+        )
+
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        if ([string]::IsNullOrWhiteSpace($env:ComSpec)) {
+            $startInfo.FileName = Join-Path $env:SystemRoot "System32\cmd.exe"
+        }
+        else {
+            $startInfo.FileName = $env:ComSpec
+        }
+        $startInfo.Arguments = '/d /s /c ""' + $commandPath + '""'
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.EnvironmentVariables["COMTOOL_HELPER"] = $Path
+        $startInfo.EnvironmentVariables["COMTOOL_STDOUT"] = $stdoutPath
+        $startInfo.EnvironmentVariables["COMTOOL_STDERR"] = $stderrPath
+
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) {
+            throw "Staged aipdebugctl.exe usage smoke could not start."
+        }
+
+        $clock = [Diagnostics.Stopwatch]::StartNew()
+        $breach = $null
+        while (-not $process.WaitForExit(50)) {
+            $stdoutLength = (Get-Item -LiteralPath $stdoutPath).Length
+            $stderrLength = (Get-Item -LiteralPath $stderrPath).Length
+            if ($stdoutLength -gt $MaxOutputBytes -or
+                $stderrLength -gt $MaxOutputBytes) {
+                $breach =
+                    "Staged aipdebugctl.exe usage smoke exceeded the " +
+                    "$MaxOutputBytes-byte output bound."
+                break
+            }
+            if ($clock.ElapsedMilliseconds -ge $TimeoutMs) {
+                $breach =
+                    "Staged aipdebugctl.exe did not exit within the " +
+                    "$TimeoutMs ms usage-smoke bound."
+                break
+            }
+        }
+
+        if ($null -ne $breach) {
+            try {
+                & (Join-Path $env:SystemRoot "System32\taskkill.exe") /PID $process.Id /T /F > $null 2>&1
+            }
+            catch {
+            }
+            try {
+                [void]$process.WaitForExit(2000)
+            }
+            catch {
+            }
+            throw $breach
+        }
+
+        $process.WaitForExit()
+        foreach ($outputPath in @($stdoutPath, $stderrPath)) {
+            $outputLength = (Get-Item -LiteralPath $outputPath).Length
+            if ($outputLength -gt $MaxOutputBytes) {
+                throw (
+                    "Staged aipdebugctl.exe usage smoke exceeded the " +
+                    "$MaxOutputBytes-byte output bound."
+                )
+            }
+        }
+
+        $usageText =
+            ([IO.File]::ReadAllText($stdoutPath, [Text.Encoding]::UTF8)) +
+            [Environment]::NewLine +
+            ([IO.File]::ReadAllText($stderrPath, [Text.Encoding]::UTF8))
+        if ($process.ExitCode -ne 2 -or
+            $usageText -notmatch '(?i)usage:') {
+            throw (
+                "The staged aipdebugctl.exe did not pass its bounded usage smoke " +
+                "(expected exit 2 plus usage text)."
+            )
+        }
+    }
+    finally {
+        if ($null -ne $process) {
+            $process.Dispose()
+        }
+        Remove-Item -LiteralPath $stdoutPath, $stderrPath, $commandPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Remove-TreeBestEffort {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$Attempts = 8
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            return
+        }
+        catch {
+            $lastError = $_.Exception.Message
+            if ($attempt -lt $Attempts) {
+                Start-Sleep -Milliseconds ([Math]::Min(75 * $attempt, 500))
+            }
+        }
+    }
+
+    Write-Warning (
+        "Release completed, but temporary directory cleanup could not remove " +
+        "'$Path' after $Attempts attempts: $lastError"
+    )
+}
+
+function Get-SourceTreeFingerprint {
+    param(
+        [Parameter(Mandatory = $true)][string]$GitRoot,
+        [Parameter(Mandatory = $true)][string]$ScopeRoot
+    )
+
+    $paths = @(& git -C $ScopeRoot -c core.quotePath=false ls-files --full-name --cached --others --exclude-standard -- .)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not enumerate Git-visible COM Tool V2 source files."
+    }
+
+    $entries = [System.Collections.Generic.List[string]]::new()
+    foreach ($relativePath in @($paths | Sort-Object -Unique)) {
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            continue
+        }
+
+        $normalizedPath = $relativePath.Replace("\", "/")
+        $fullPath = Join-Path $GitRoot $relativePath
+        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+            [void]$entries.Add(("{0}|MISSING" -f $normalizedPath))
+            continue
+        }
+
+        $item = Get-Item -LiteralPath $fullPath
+        $hash = Get-Sha256 $fullPath
+        [void]$entries.Add(
+            ("{0}|{1}|{2}" -f $normalizedPath, $item.Length, $hash)
+        )
+    }
+
+    $payload = [Text.Encoding]::UTF8.GetBytes(
+        ($entries -join [Environment]::NewLine)
+    )
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $fingerprint = [Convert]::ToHexString(
+            $sha256.ComputeHash($payload)
+        ).ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+
+    return [pscustomobject]@{
+        sha256 = $fingerprint
+        fileCount = $entries.Count
+    }
+}
+
 function Assert-SourceStable {
     param(
         [Parameter(Mandatory = $true)][string]$ExpectedCommit,
-        [Parameter(Mandatory = $true)][bool]$AllowDirtySource
+        [Parameter(Mandatory = $true)][bool]$AllowDirtySource,
+        [Parameter(Mandatory = $true)][string]$ExpectedTreeFingerprint,
+        [Parameter(Mandatory = $true)][string]$GitRoot
     )
 
     $currentCommit = (& git -C $root rev-parse HEAD).Trim()
@@ -84,6 +346,14 @@ function Assert-SourceStable {
             $ExpectedCommit,
             [StringComparison]::OrdinalIgnoreCase)) {
         throw "Source commit changed while the release transaction was running."
+    }
+
+    $currentSourceTree = Get-SourceTreeFingerprint -GitRoot $GitRoot -ScopeRoot $root
+    if (-not [string]::Equals(
+            [string]$currentSourceTree.sha256,
+            $ExpectedTreeFingerprint,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "COM Tool V2 source bytes changed while the release transaction was running. Refusing to finalize a mixed-source artifact."
     }
 
     if (-not $AllowDirtySource) {
@@ -161,7 +431,7 @@ if (-not (Test-Path -LiteralPath $dotnet)) {
 $globalJsonPath = Join-Path $root "global.json"
 $mcpProjectPath = Join-Path $root "src\ComTool.Transport.Mcp\ComTool.Transport.Mcp.csproj"
 $protocolVersionPath = Join-Path $root "src\ComTool.Protocol\ProtocolVersion.cs"
-$attributionPath = Join-Path $root "..\ATTRIBUTION.md"
+$attributionPath = Join-Path $root "ATTRIBUTION.md"
 if (-not (Test-Path -LiteralPath $globalJsonPath -PathType Leaf)) {
     throw "global.json was not found at '$globalJsonPath'."
 }
@@ -194,6 +464,15 @@ if ([string]::IsNullOrWhiteSpace($mcpSdkVersion)) {
     throw "ModelContextProtocol package reference does not contain a pinned version."
 }
 
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if ($null -eq $nodeCommand) {
+    throw "Node.js is required to validate the shipped pure-Node SDK surface."
+}
+$nodeVersion = (& $nodeCommand.Source --version).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($nodeVersion)) {
+    throw "Could not resolve the Node.js version for SDK validation."
+}
+
 $protocolVersionSource = Get-Content -LiteralPath $protocolVersionPath -Raw
 $protocolVersionMatch = [regex]::Match(
     $protocolVersionSource,
@@ -212,6 +491,10 @@ $sourceCommit = (& git -C $root rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) {
     throw "Could not resolve the source Git commit."
 }
+
+$sourceTree = Get-SourceTreeFingerprint -GitRoot $gitRoot.Trim() -ScopeRoot $root
+$sourceTreeFingerprint = [string]$sourceTree.sha256
+$sourceTreeFileCount = [int]$sourceTree.fileCount
 
 $dirtyLines = @(& git -C $root status --porcelain=v1 --untracked-files=all -- .)
 if ($LASTEXITCODE -ne 0) {
@@ -252,6 +535,10 @@ try {
     }
 
     Invoke-Checked {
+        & $nodeCommand.Source (Join-Path $root "scripts\build-knowledge-pack.mjs") --check
+    } "Embedded COM knowledge-pack deterministic drift check"
+
+    Invoke-Checked {
         & $dotnet run --project (Join-Path $root "tools\schema-validator\SchemaValidator.csproj") -c Release --no-restore -- $root
     } "Protocol/schema metadata validation"
 
@@ -262,9 +549,27 @@ try {
         Invoke-Checked {
             & $dotnet build (Join-Path $root "ComTool.V2.slnx") -c Release --no-restore --artifacts-path $sdkArtifactsRoot
         } "Release build"
+        $previousV2Root = $env:COMTOOL_V2_ROOT
+        try {
+            $env:COMTOOL_V2_ROOT = $root
+            Invoke-Checked {
+                & $dotnet test (Join-Path $root "ComTool.V2.slnx") -c Release --no-build --artifacts-path $sdkArtifactsRoot
+            } "Deterministic test gate"
+        }
+        finally {
+            if ($null -eq $previousV2Root) {
+                Remove-Item Env:COMTOOL_V2_ROOT -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:COMTOOL_V2_ROOT = $previousV2Root
+            }
+        }
         Invoke-Checked {
-            & $dotnet test (Join-Path $root "ComTool.V2.slnx") -c Release --no-build --artifacts-path $sdkArtifactsRoot
-        } "Deterministic test gate"
+            & $nodeCommand.Source --test (Join-Path $root "sdk\node\test\sdk.test.mjs")
+        } "Node SDK deterministic test gate"
+        Invoke-Checked {
+            & $nodeCommand.Source (Join-Path $root "sdk\node\test\typecheck.mjs")
+        } "Node SDK TypeScript 5.9.3 declaration gate"
     }
 
     $projects = @(
@@ -280,13 +585,19 @@ try {
         $output = Join-Path $publishRoot $name
         $ridLockFile = "packages.$RuntimeIdentifier.lock.json"
 
+        Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty) -ExpectedTreeFingerprint $sourceTreeFingerprint -GitRoot $gitRoot.Trim()
+
         Invoke-Checked {
             & $dotnet restore $projectPath -r $RuntimeIdentifier --locked-mode --artifacts-path $sdkArtifactsRoot "-p:NuGetLockFilePath=$ridLockFile"
         } "Locked RID restore $name"
 
+        Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty) -ExpectedTreeFingerprint $sourceTreeFingerprint -GitRoot $gitRoot.Trim()
+
         Invoke-Checked {
             & $dotnet publish $projectPath -c Release -r $RuntimeIdentifier --self-contained true --no-restore --artifacts-path $sdkArtifactsRoot -o $output "-p:Version=$Version" "-p:InformationalVersion=$Version" "-p:PublishSingleFile=false" "-p:PublishReadyToRun=false" "-p:PublishTrimmed=false" "-p:DebugType=None" "-p:DebugSymbols=false"
         } "Publish $name"
+
+        Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty) -ExpectedTreeFingerprint $sourceTreeFingerprint -GitRoot $gitRoot.Trim()
 
         Merge-PublishDirectory -Source $output -Destination $packageRoot
     }
@@ -304,9 +615,60 @@ try {
         }
     }
 
+    if (-not (Test-Path -LiteralPath $AipDebugCtlPath -PathType Leaf)) {
+        throw (
+            "The native AIPDebug VectorIPC helper was not found at " +
+            "'$AipDebugCtlPath'. Build /scripts/aip-debug first or pass " +
+            "-AipDebugCtlPath explicitly."
+        )
+    }
+    if ([IO.Path]::GetExtension($AipDebugCtlPath) -ne ".exe") {
+        throw "The AIPDebug helper must be a Windows .exe: '$AipDebugCtlPath'."
+    }
+    $aipDebugCtlDestination = Join-Path $packageRoot "aipdebugctl.exe"
+    Copy-Item -LiteralPath $AipDebugCtlPath -Destination $aipDebugCtlDestination
+
+    Invoke-NativeHelperUsageSmoke -Path $aipDebugCtlDestination
+
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-user.ps1") -Destination $packageRoot
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "uninstall-user.ps1") -Destination $packageRoot
     Copy-Item -LiteralPath $attributionPath -Destination (Join-Path $packageRoot "ATTRIBUTION.md")
+
+    # Ship the dependency-free Node control surface without its test harness.
+    # It talks only to ComTool.Cli.exe stdio, which forwards into the one
+    # persistent RuntimeHost; it is not another Adobe/COM implementation.
+    $nodeSdkSource = Join-Path $root "sdk\node"
+    $nodeSdkDestination = Join-Path $packageRoot "sdk\node"
+    New-Item -ItemType Directory -Force -Path $nodeSdkDestination | Out-Null
+    Copy-Item -LiteralPath (Join-Path $nodeSdkSource "package.json") -Destination $nodeSdkDestination
+    Copy-Item -LiteralPath (Join-Path $nodeSdkSource "index.mjs") -Destination $nodeSdkDestination
+    Copy-Item -LiteralPath (Join-Path $nodeSdkSource "index.d.ts") -Destination $nodeSdkDestination
+    Copy-Item -LiteralPath (Join-Path $nodeSdkSource "README.md") -Destination $nodeSdkDestination
+    Copy-Item -LiteralPath (Join-Path $nodeSdkSource "lib") -Destination $nodeSdkDestination -Recurse
+    Copy-Item -LiteralPath (Join-Path $nodeSdkSource "bin") -Destination $nodeSdkDestination -Recurse
+
+    $nodeSdkRequired = @(
+        "package.json",
+        "index.mjs",
+        "index.d.ts",
+        "README.md",
+        "lib\client.mjs",
+        "lib\cli-options.mjs",
+        "lib\runner.mjs",
+        "lib\recovery.mjs",
+        "lib\session.mjs",
+        "bin\comtool-run.mjs"
+    )
+    foreach ($relativePath in $nodeSdkRequired) {
+        $sdkPath = Join-Path $nodeSdkDestination $relativePath
+        if (-not (Test-Path -LiteralPath $sdkPath -PathType Leaf)) {
+            throw "Required staged Node SDK file '$relativePath' was not copied."
+        }
+    }
+
+    Invoke-Checked {
+        & $nodeCommand.Source (Join-Path $nodeSdkDestination "bin\comtool-run.mjs") --help | Out-Null
+    } "Staged Node SDK import/CLI smoke"
 
     $signingEnabled =
         -not [string]::IsNullOrWhiteSpace($SignToolPath) -or
@@ -325,7 +687,8 @@ try {
         $peFiles = @(
             Get-ChildItem -LiteralPath $packageRoot -File -Recurse |
                 Where-Object {
-                    $_.Name -like "ComTool.*" -and
+                    ($_.Name -like "ComTool.*" -or
+                     $_.Name -eq "aipdebugctl.exe") -and
                     $_.Extension -in ".exe", ".dll"
                 } |
                 Sort-Object FullName
@@ -344,6 +707,10 @@ try {
                 ).Replace("\", "/"))
         }
     }
+
+    # Signing mutates PE bytes, so native-helper provenance must be captured
+    # after the optional signing pass rather than from the pre-sign image.
+    $aipDebugCtlSha256 = Get-Sha256 $aipDebugCtlDestination
 
     $fileEntries = @(
         Get-ChildItem -LiteralPath $packageRoot -File -Recurse |
@@ -368,6 +735,8 @@ try {
         source = [ordered]@{
             commit = $sourceCommit
             dirty = $sourceDirty
+            treeFingerprintSha256 = $sourceTreeFingerprint
+            gitVisibleFileCount = $sourceTreeFileCount
         }
         dependencyAudit = [ordered]@{
             kind = "nuget-vulnerability"
@@ -377,10 +746,12 @@ try {
         }
         toolchain = [ordered]@{
             dotnetSdk = $dotnetSdkVersion
+            node = $nodeVersion
             modelContextProtocol = $mcpSdkVersion
         }
         gate = [ordered]@{
             deterministicTestsExecuted = -not [bool]$SkipTests
+            nodeSdkTestsExecuted = -not [bool]$SkipTests
             schemaMetadataValidationExecuted = $true
             vulnerabilityAuditExecuted = $true
             packageSmokePowerShell51 = $false
@@ -396,6 +767,14 @@ try {
             timestampUrl = if ($signingEnabled) { $TimestampUrl } else { $null }
             files = $signedFiles
         }
+        nativeHelpers = [ordered]@{
+            aipdebugctl = [ordered]@{
+                path = "aipdebugctl.exe"
+                sha256 = $aipDebugCtlSha256
+                transport = "vectoripc"
+                required = $true
+            }
+        }
         entrypoints = $entrypoints
         files = $fileEntries
     }
@@ -409,9 +788,7 @@ try {
     }
     $sumLines | Set-Content -LiteralPath $sumsPath -Encoding utf8NoBOM
 
-    Invoke-Checked {
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-package.ps1") -Source $packageRoot -ExpectedVersion $Version
-    } "Stock Windows PowerShell 5.1 package verification"
+    $packageSmoke = Invoke-PackageVerification -Source $packageRoot -ExpectedVersion $Version -ExpectedCommit $sourceCommit -Description "Stock Windows PowerShell 5.1 staged-package verification"
 
     $manifest["gate"]["packageSmokePowerShell51"] = $true
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
@@ -421,7 +798,11 @@ try {
     "$zipHash  $zipName" |
         Set-Content -LiteralPath "$zipPath.sha256" -Encoding ascii
 
-    Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty)
+    New-Item -ItemType Directory -Force -Path $zipVerifyRoot | Out-Null
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $zipVerifyRoot
+    $zipSmoke = Invoke-PackageVerification -Source $zipVerifyRoot -ExpectedVersion $Version -ExpectedCommit $sourceCommit -Description "Stock Windows PowerShell 5.1 shipped-ZIP verification"
+
+    Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty) -ExpectedTreeFingerprint $sourceTreeFingerprint -GitRoot $gitRoot.Trim()
 
     Move-Item -LiteralPath $stagingRoot -Destination $artifactRoot
 
@@ -435,19 +816,21 @@ try {
         runtimeIdentifier = $RuntimeIdentifier
         sourceCommit = $sourceCommit
         sourceDirty = $sourceDirty
+        sourceTreeFingerprintSha256 = $sourceTreeFingerprint
+        sourceTreeFileCount = $sourceTreeFileCount
         authenticodeSigned = $signingEnabled
         packageDirectory = $finalPackageRoot
         manifest = $finalManifestPath
         archive = $finalZipPath
         archiveSha256 = $zipHash
         fileCount = $fileEntries.Count
+        packageSmokePowerShell51 = [bool]$packageSmoke.ok
+        shippedZipSmokePowerShell51 = [bool]$zipSmoke.ok
+        powerShellVersion = [string]$zipSmoke.psVersion
     } | ConvertTo-Json -Compress
 }
 finally {
-    if (Test-Path -LiteralPath $stagingRoot) {
-        Remove-Item -LiteralPath $stagingRoot -Recurse -Force
-    }
-    if (Test-Path -LiteralPath $sdkArtifactsRoot) {
-        Remove-Item -LiteralPath $sdkArtifactsRoot -Recurse -Force
-    }
+    Remove-TreeBestEffort $stagingRoot
+    Remove-TreeBestEffort $sdkArtifactsRoot
+    Remove-TreeBestEffort $zipVerifyRoot
 }

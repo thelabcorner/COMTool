@@ -62,10 +62,8 @@ public static class ProtocolJson
         if (request.Operation.Length > 256)
             throw new ProtocolValidationException("invalid_operation", "Operation exceeds 256 characters.");
 
-        ValidateTimeout(request.Policy?.QueueTimeoutMs, nameof(OperationPolicy.QueueTimeoutMs));
-        ValidateTimeout(request.Policy?.RetryBudgetMs, nameof(OperationPolicy.RetryBudgetMs));
-        ValidateTimeout(request.Policy?.OperationSoftTimeoutMs, nameof(OperationPolicy.OperationSoftTimeoutMs));
-        ValidateTimeout(request.Policy?.WorkerWatchdogMs, nameof(OperationPolicy.WorkerWatchdogMs));
+        ValidateWorkerWatchdog(request.Policy?.WorkerWatchdogMs);
+        ValidateRetryBudget(request.Policy?.RetryBudgetMs);
         ValidateLeaseId(request.Policy?.LeaseId);
         ValidateConditions(
             request.Preconditions,
@@ -234,10 +232,35 @@ public static class ProtocolJson
         }
     }
 
-    private static void ValidateTimeout(int? value, string name)
+    private static void ValidateWorkerWatchdog(int? value)
     {
-        if (value is < 0)
-            throw new ProtocolValidationException("invalid_timeout", $"{name} must be non-negative.");
+        if (value is null)
+            return;
+
+        if (value is <
+                OperationPolicy.MinWorkerWatchdogMs or
+            >
+                OperationPolicy.MaxWorkerWatchdogMs)
+        {
+            throw new ProtocolValidationException(
+                "invalid_timeout",
+                $"{nameof(OperationPolicy.WorkerWatchdogMs)} must be between {OperationPolicy.MinWorkerWatchdogMs} and {OperationPolicy.MaxWorkerWatchdogMs} ms.");
+        }
+    }
+
+    private static void ValidateRetryBudget(int? value)
+    {
+        if (value is null)
+            return;
+
+        if (!OperationPolicy.IsValidRetryBudget(value.Value))
+        {
+            throw new ProtocolValidationException(
+                "invalid_retry_budget",
+                $"{nameof(OperationPolicy.RetryBudgetMs)} must be between " +
+                $"{OperationPolicy.MinRetryBudgetMs} and " +
+                $"{OperationPolicy.MaxRetryBudgetMs} ms.");
+        }
     }
 }
 

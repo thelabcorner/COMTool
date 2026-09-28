@@ -13,8 +13,13 @@ public sealed record BrokerResponse
     public required BrokerResponseKind Kind { get; init; }
     public required bool Ok { get; init; }
     public OperationResult? OperationResult { get; init; }
+    public BrokerArtifactChunk? ArtifactChunk { get; init; }
+    public BrokerArtifactTransfer? ArtifactTransfer { get; init; }
     public BrokerReconciliation? Reconciliation { get; init; }
     public BrokerWorkerStatus? Worker { get; init; }
     public IReadOnlyList<HostTargetDescriptor>? Targets { get; init; }
+    public HostLaunchObservation? Launch { get; init; }
     public ProtocolError? Error { get; init; }
+    public BrokerOperationExecutionDisposition?
+        OperationExecutionDisposition { get; init; }
 }

@@ -1,0 +1,1591 @@
+{
+    "schemaVersion":  1,
+    "authority":  "ComTool.Migration.Parity (parity manifest is lane-owned; matrix is the legacy oracle)",
+    "matrix":  "migration/legacy-feature-matrix.json",
+    "semanticFixtures":  "migration/parity/semantic-fixtures.json",
+    "policy":  {
+                   "parityIsNotCliShapeEquality":  "A legacy subcommand and a V2 operation are not required to share a name, argument grammar, or envelope layout. Parity is judged on the semantic capability the caller can still reach and on whether V2 states uncertainty truthfully.",
+                   "states":  {
+                                  "implemented":  "The capability is reachable in V2 through registered production operations and has conformance test evidence.",
+                                  "partial":  "A meaningful subset of the capability is reachable; named aspects are listed in missingAspects.",
+                                  "superseded":  "The capability is reachable only through a different, deliberately stronger abstraction. Not a regression.",
+                                  "intentional_drop":  "The legacy capability is deliberately absent from V2 and must not be reintroduced.",
+                                  "missing":  "The matrix names a V2 operation that does not exist in the production operation catalog."
+                              },
+                   "capabilityDispositions":  {
+                                                  "retained":  "The legacy capability survives with comparable semantics.",
+                                                  "replaced_by_stronger_abstraction":  "The legacy abstraction is gone but a strictly safer V2 mechanism carries the intent.",
+                                                  "intentionally_not_retained":  "The legacy capability itself is rejected and has no V2 equivalent."
+                                              },
+                   "catalogPresenceRule":  "Catalog presence is required only for v2Operations entries with production=true. Entries with kind facet|type|policy|transport name architecture, not a registered operation, and are never catalog-gated.",
+                   "evidenceRule":  "Every implemented mapping needs at least one evidence reference. kind=test evidence additionally requires the symbol to be present in the file, so a renamed or deleted test class fails the gate. Test counts are never asserted."
+               },
+    "mappings":  [
+                     {
+                         "legacySurface":  "status",
+                         "matrixClassification":  "preserve",
+                         "capability":  "Read host liveness, build/version identity, document count, and the active-document summary without conflating host health with script-engine health.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.target.status",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.runtime.health",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "ITargetStatus",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "V2 splits runtime health from target status; the legacy conflation is rejected."
+                                                          ],
+                          "semanticFixtures":  [
+                                                   "status/read-success",
+                                                   "status/host-failure",
+                                                   "status/partial-host-failure-is-not-success"
+                                               ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationCatalogIntegrationTests.cs",
+                                              "symbol":  "OperationCatalogIntegrationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/RuntimeSafetyTests.cs",
+                                              "symbol":  "RuntimeSafetyTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/illustrator-wave-a-read-interop-2026-09-24.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "snapshot",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Capture active-document and selection state as one bounded, machine-readable observation.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.target.snapshot",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "ISnapshotProvider",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "The matrix names the operation host.snapshot; the registered operation is core.target.snapshot. The facet ISnapshotProvider still provides it. Naming drift only, not a capability gap."
+                                                          ],
+                          "semanticFixtures":  [
+                                                   "snapshot/read-success",
+                                                   "snapshot/inner-failure-is-not-outer-success"
+                                               ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorSessionSnapshotTests.cs",
+                                              "symbol":  "IllustratorSessionSnapshotTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/persistent-runtime-2026-09-24.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "get \u003cpath\u003e",
+                         "matrixClassification":  "preserve",
+                         "capability":  "Resolve a dotted COM path with 0-based collection indices and read one property.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "com.get",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IComAutomation",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Empty path segments are rejected instead of collapsing silently.",
+                                                              "Nested object summaries are re-read through the retry policy instead of un-retried getattr chains."
+                                                          ],
+                         "semanticFixtures":  [
+                                                  "com-get/read-scalar"
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorComReadBridgeTests.cs",
+                                              "symbol":  "IllustratorComReadBridgeTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorStructureOperationsTests.cs",
+                                              "symbol":  "IllustratorStructureOperationsTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "set \u003cpath\u003e \u003cvalue\u003e",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Write one direct COM property with declared mutation safety and postcondition support.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "illustrator.artboard.setName",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "com.set",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IComAutomation",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Generic com.set is a fixed external-side-effect escape hatch with a required lease; caller-supplied effects cannot downgrade it.",
+                                                              "Known positive inventory signatures are enforced before target discovery/worker dispatch (including primitive and enum setter domains). Because the inventory source has no authoritative Illustrator version, unresolved members remain intentionally late-bound rather than becoming a false denylist.",
+                                                              "Prefer the typed illustrator.* mutation operations when a first-class property domain exists."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/ComSetMutationTests.cs",
+                                              "symbol":  "ComSetMutationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorComWriteBridgeTests.cs",
+                                              "symbol":  "IllustratorComWriteBridgeTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorComMutationBridgeTests.cs",
+                                              "symbol":  "IllustratorComMutationBridgeTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Knowledge.Tests/ComMutationKnowledgeValidatorTests.cs",
+                                              "symbol":  "ComMutationKnowledgeValidatorTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeOperationRoutingTests.cs",
+                                              "symbol":  "GenericComInventoryContradictionsAreRejectedBeforeTargetOrWorker"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "call \u003cpath\u003e [args]",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Invoke a COM method with JSON arguments, with mutation risk classified from the operation rather than the raw method name.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "com.call.read",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "com.call",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IComAutomation",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Generic com.call is a fixed external-side-effect escape hatch with a required lease; method mutation risk is never inferred from the raw method name.",
+                                                              "Known inventory arity and concrete primitive/enum domains are enforced before target discovery/worker dispatch. Source VT_VARIANT parameters and unresolved/version-ambiguous signatures remain intentionally late-bound rather than being assigned guessed semantic domains.",
+                                                              "Use typed operations for semantic domains the type library encodes only as VT_VARIANT; for example illustrator.document.close owns the explicit save/discard/prompt/reject-if-dirty policy instead of treating Document.Close(Boolean) as a typed contract."
+                                                          ],
+                         "semanticFixtures":  [
+                                                  "com-call/read-count"
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorComReadBridgeTests.cs",
+                                              "symbol":  "IllustratorComReadBridgeTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationCatalogIntegrationTests.cs",
+                                              "symbol":  "OperationCatalogIntegrationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorComMutationBridgeTests.cs",
+                                              "symbol":  "IllustratorComMutationBridgeTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Knowledge.Tests/ComMutationKnowledgeValidatorTests.cs",
+                                              "symbol":  "ComMutationKnowledgeValidatorTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeOperationRoutingTests.cs",
+                                              "symbol":  "GenericComInventoryContradictionsAreRejectedBeforeTargetOrWorker"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "eval --expr/--code",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Run ExtendScript in the host with faithful argument and return types and non-replayable mutation semantics.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "script.eval",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IScriptRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "A result string that merely looks like JSON is never re-interpreted as JSON; type identity comes from the script codec.",
+                                                              "Static ES3 preflight is advisory and never claimed as live-engine equivalence."
+                                                          ],
+                         "semanticFixtures":  [
+                                                  "script-eval/int-result",
+                                                  "script-eval/runtime-error",
+                                                  "script-eval/ambiguous-outcome"
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorScriptEvalTests.cs",
+                                              "symbol":  "IllustratorScriptEvalTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorSessionScriptEvalTests.cs",
+                                              "symbol":  "IllustratorSessionScriptEvalTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/script-eval-eson-live-2026-09-24.json",
+                                              "symbol":  null
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/script-eval-eson-mutation-safety-2026-09-24.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "eval --file",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Run a JSX file with Adobe preprocessor directives through the host\u0027s own directive-aware route.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "script.runFile",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IScriptRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Directive-bearing files are routed through the directive-aware host path instead of the inject-then-eval path, so arguments and return behavior no longer differ silently by route."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorScriptRunFileTests.cs",
+                                              "symbol":  "IllustratorScriptRunFileTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationCatalogIntegrationTests.cs",
+                                              "symbol":  "OperationCatalogIntegrationTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "ES3 preflight",
+                         "matrixClassification":  "preserve",
+                         "capability":  "Reject unsupported script syntax before spending a host call, without overclaiming live-engine equivalence.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "script.validate",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IScriptStaticAnalyzer",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Validation is explicitly advisory static analysis; only script.eval or script.runFile can provide live-engine truth."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/ScriptEs3PreflightTests.cs",
+                                              "symbol":  "ScriptEs3PreflightTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeOperationRoutingTests.cs",
+                                              "symbol":  "RuntimeOperationRoutingTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "action \u003cname\u003e",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Run a named Illustrator action with bounded polling and an explicit postcondition.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "illustrator.action.run",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IActionRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "V2 never mutates process-global UserInteractionLevel; the explicit DoScript dialog flag is the only dialog policy.",
+                                                              "A run already busy before dispatch is refused instead of being attributed to the caller."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorActionRunTests.cs",
+                                              "symbol":  "IllustratorActionRunTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "open \u003cfile\u003e",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Open a document with explicit lifecycle ownership instead of implicit active-document state.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "illustrator.document.open",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IDocumentLifecycle",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "The matrix names the operation document.open; the registered operation is illustrator.document.open. Naming drift only."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorDocumentOperationsTests.cs",
+                                              "symbol":  "IllustratorDocumentOperationsTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/wave-b-live-safe-reconciliation-2026-09-25.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "close --save Boolean",
+                         "matrixClassification":  "drop",
+                         "capability":  "Close a document under a save policy the caller cannot misread.",
+                         "state":  "superseded",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "illustrator.document.close",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "illustrator.document.save",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IDocumentLifecycle",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "The Boolean save argument is dropped. Illustrator expects an AiSaveOptions domain value, and an implicit save/discard default is unsafe.",
+                                                              "Replacement policy vocabulary is explicit: save, discard, prompt, reject_if_dirty.",
+                                                              "The matrix names the operation document.close; the registered operation is illustrator.document.close. Naming drift only."
+                                                          ],
+                         "semanticFixtures":  [
+                                                  "document-lifecycle/close-boolean-policy-dropped"
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorDocumentOperationsTests.cs",
+                                              "symbol":  "IllustratorDocumentOperationsTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/gate-0a-success.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "batch",
+                         "matrixClassification":  "deprecate",
+                         "capability":  "Run several operations in one host session without continuing past a failed prerequisite.",
+                         "state":  "superseded",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.workflow.submit",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.workflow.get",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.workflow.cancel",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.workflow.resume",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IWorkflowRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Continue-after-failure is not the default: dependent workflows fail fast unless the step declares otherwise.",
+                                                              "A workflow runs under a target lease; the legacy batch held only a process-local named mutex.",
+                                                              "Submission is asynchronous with an explicit status handle; the legacy batch was a synchronous in-process loop."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeSupervisorWorkflowTests.cs",
+                                              "symbol":  "RuntimeSupervisorWorkflowTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationCatalogIntegrationTests.cs",
+                                              "symbol":  "OperationCatalogIntegrationTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "queue",
+                         "matrixClassification":  "drop",
+                         "capability":  "Persist steps across calls and resume, without blind replay of a mutation whose dispatch is unknown.",
+                         "state":  "superseded",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.workflow.submit",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.workflow.resume",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.workflow.get",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IJobRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Persisted done entries are never blindly re-dispatched. A step whose mutation dispatch is uncertain becomes a durable mutation incident requiring explicit reconciliation.",
+                                                              "The legacy at-least-once replay guarantee is deliberately not reproduced.",
+                                                              "Multi-writer races are resolved by a revisioned durable store rather than file-level races."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/MutationLedgerTests.cs",
+                                              "symbol":  "MutationLedgerTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/OperationSpecificReconciliationTests.cs",
+                                              "symbol":  "OperationSpecificReconciliationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/WorkflowJobStoreTests.cs",
+                                              "symbol":  "WorkflowJobStoreTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "--stay stdin chain",
+                         "matrixClassification":  "drop",
+                         "capability":  "Keep one host session alive across many commands, with transport parity across stdio, pipe, and MCP.",
+                         "state":  "superseded",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.runtime.health",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "ITransport",
+                                                  "production":  false,
+                                                  "kind":  "transport"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Session continuity is owned by the runtime/supervisor pair, not by keeping one client process alive. A dropped client process does not lose an owned worker.",
+                                                              "The legacy --stay help wording implied persistence across later processes; that claim is not reproduced."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Transport.Stdio.Tests/CrossTransportParityTests.cs",
+                                              "symbol":  "CrossTransportParityTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/WorkerProcessStartupTests.cs",
+                                              "symbol":  "WorkerProcessStartupTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/gate-0d-stdio.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "watch",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Poll a host condition until it is satisfied, with bounded timing and honest equality semantics.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "watch.condition",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IWatchRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "V2 watch sources must be registered read-only operations; arbitrary script.eval cannot self-certify as a safe polling source.",
+                                                              "Poll intervals are bounded away from zero so a watch cannot hammer Illustrator."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/WatchConditionTests.cs",
+                                              "symbol":  "WatchConditionTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "named session",
+                         "matrixClassification":  "drop",
+                         "capability":  "Cross-process agent-owned arbitrary state with an operation counter.",
+                         "state":  "intentional_drop",
+                         "capabilityDisposition":  "intentionally_not_retained",
+                         "v2Operations":  [
+
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Filename-sanitized session names alias distinct agents, so the abstraction is unsound as a concurrency primitive.",
+                                                              "The file-backed counter is not host session state and loses updates under multi-writer access.",
+                                                              "V2 exposes real runtime/debug/workflow continuity handles instead. Do not reintroduce a file-backed named session as a foundation."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeStateLayoutTests.cs",
+                                              "symbol":  "RuntimeStateLayoutTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "task run/status/wait/cancel",
+                         "matrixClassification":  "drop",
+                         "capability":  "Own a spawned child process with a durable record that cannot cancel or finalize by PID reuse alone.",
+                         "state":  "superseded",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.workflow.submit",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.workflow.get",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.workflow.cancel",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.workflow.resume",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IJobRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "V2 does not persist a bare child PID and later kill it; workflow cancellation is a CAS-style durable job-state request and every host step re-enters the authoritative dispatcher.",
+                                                              "Workflow ownership persists the runtime PID plus process start time; an orphaned running job becomes interrupted and requires explicit resume.",
+                                                              "A parent workflow cannot report success while a failed child step is hidden."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/WorkflowJobStoreTests.cs",
+                                              "symbol":  "WorkflowJobStoreTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeSupervisorWorkflowTests.cs",
+                                              "symbol":  "RuntimeSupervisorWorkflowTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "debug attach/breakpoints",
+                         "matrixClassification":  "preserve",
+                         "capability":  "Attach to the Adobe ExtendScript debugger, keep a persistent conversation, and manage host-persisted breakpoints.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "debug.session.open",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "debug.session.status",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "debug.session.command",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "debug.session.close",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IDebugRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "The debugger session is worker-owned and persistent, not one process per invocation. debug.session.status is read-only and needs no lease, because observing session ownership is not debugger use.",
+                                                              "Session identity is invalidated on host restart rather than reused."
+                                                          ],
+                         "semanticFixtures":  [
+                                                  "debug-command/session-command-shapes"
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorDebugSessionLifecycleTests.cs",
+                                              "symbol":  "IllustratorDebugSessionLifecycleTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorDebugSessionManagerTests.cs",
+                                              "symbol":  "IllustratorDebugSessionManagerTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/illustrator-debugger-live-proof-2026-09-26.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "debug eval/continue/step/frame/properties",
+                         "matrixClassification":  "redesign",
+                         "capability":  "REPL-style debugger control: evaluate in a suspended frame, step, continue, and read frames and properties.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "debug.session.command",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IDebugRuntime",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Debugger interaction is stateful by design. A stateless CLI invocation that pretends a step is independent is rejected.",
+                                                              "Bridge startup time is watchdog-bounded and owned by the session rather than blocking an unbounded client call."
+                                                          ],
+                         "semanticFixtures":  [
+                                                  "debug-command/session-command-shapes"
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorDebugCommandValidationTests.cs",
+                                              "symbol":  "IllustratorDebugCommandValidationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorDebugSessionLifecycleTests.cs",
+                                              "symbol":  "IllustratorDebugSessionLifecycleTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "COM named mutex",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Serialize host automation with an identity-checked lease that survives process death without losing mutation truth.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.target.lease.acquire",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.lease.renew",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.lease.release",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.reconcile",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.mutation.reconcile",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.incident.resolve",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IScheduler",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "The lock is per target, not one global COM mutex, so unrelated hosts do not serialize against each other.",
+                                                              "Abandoned-lock recovery proves only deadlock recovery, never document consistency; a mutation that was in flight stays a durable incident.",
+                                                              "The legacy metadata file was not ProgID-scoped and had release/delete races; V2 has no such file."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/TargetLeaseManagerTests.cs",
+                                              "symbol":  "TargetLeaseManagerTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/TargetProcessLeaseLockTests.cs",
+                                              "symbol":  "TargetProcessLeaseLockTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/TargetSupervisorLeaseTests.cs",
+                                              "symbol":  "TargetSupervisorLeaseTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/gate-0c-supervisor-worker.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "HRESULT retry",
+                         "matrixClassification":  "preserve",
+                         "capability":  "Retry only known transient COM failures with bounded backoff, without overshooting the deadline or hiding execution certainty.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.operation.describe",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IRetryPolicy",
+                                                  "production":  false,
+                                                  "kind":  "policy"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "A generic server fault is classified for execution certainty rather than being retried blindly.",
+                                                              "A local timeout is never treated as proof that the host operation did not execute."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Protocol.Tests/ProtocolContractTests.cs",
+                                              "symbol":  "ProtocolContractTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorRetryBudgetTests.cs",
+                                              "symbol":  "IllustratorRetryBudgetTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeStateLayoutTests.cs",
+                                              "symbol":  "RuntimeStateLayoutTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Transport.Mcp.Tests/RuntimeBridgeTests.cs",
+                                              "symbol":  "RuntimeBridgeTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "automatic attach/launch",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Discover and bind to a host process with strong identity and explicit ownership of a launched host.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.targets.list",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.attach",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.launch",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.capabilities",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "ITargetLifecycle",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "V2 never implicitly launches while attaching: discovery, exact-generation attach, and launch are separate explicit operations.",
+                                                              "Attaching to a preexisting generation never transfers ownership to the runtime.",
+                                                              "A launch whose resulting generation cannot be proven remains unproven and does not authorize cleanup or silent retry.",
+                                                              "Every target identity is bound to host family, PID, process start time, executable path, and endpoint identity through the strong target id."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/HostAttachRuntimeTests.cs",
+                                              "symbol":  "HostAttachRuntimeTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/HostLaunchRuntimeTests.cs",
+                                              "symbol":  "HostLaunchRuntimeTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/WorkerHostLaunchExecutorTests.cs",
+                                              "symbol":  "WorkerHostLaunchExecutorTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeOperationRoutingTests.cs",
+                                              "symbol":  "RuntimeOperationRoutingTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "JSON envelope + exit codes",
+                         "matrixClassification":  "preserve",
+                         "capability":  "One machine-readable envelope per operation with orthogonal status, retryability, and execution certainty.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "OperationResult",
+                                                  "production":  false,
+                                                  "kind":  "type"
+                                              },
+                                              {
+                                                  "name":  "com.protocol",
+                                                  "production":  false,
+                                                  "kind":  "type"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Retryability and execution certainty are separate fields instead of being inferred from a message string.",
+                                                              "Nested failures cannot be reported as outer success.",
+                                                              "Exit-code classes are a CLI transport concern; the protocol itself carries status rather than an exit code."
+                                                          ],
+                         "semanticFixtures":  [
+                                                  "status/host-failure",
+                                                  "script-eval/ambiguous-outcome"
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Protocol.Tests/ProtocolContractTests.cs",
+                                              "symbol":  "ProtocolContractTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "fixtures/protocol/cases.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "large-result temp offload",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Keep oversized results out of the caller\u0027s context using a size-measured, expiring, content-addressable reference.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.artifact.describe",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.artifact.read",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IArtifactStore",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "V2 uses opaque runtime artifact IDs rather than exposing temporary filesystem paths.",
+                                                              "The authenticated runtime-to-worker broker retains the public 1 MiB frame ceiling; large successful result payloads use correlated bounded chunk frames so only the sole runtime process commits the artifact store."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/HostResultArtifactMaterializationTests.cs",
+                                              "symbol":  "HostResultArtifactMaterializationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/ArtifactRuntimeOperationTests.cs",
+                                              "symbol":  "ArtifactRuntimeOperationTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "src/ComTool.Supervisor/TargetSupervisor.cs",
+                                              "symbol":  "_resultMaterializer"
+                                          },
+                                           {
+                                               "kind":  "evidence",
+                                               "path":  "src/ComTool.Supervisor/WorkerBrokerOptions.cs",
+                                               "symbol":  "public int MaxFrameBytes"
+                                           },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/WorkerBrokerOutcomeTests.cs",
+                                              "symbol":  "ArtifactChunkFrameFitsDefaultOneMiBBrokerBound"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "ESON/ESPACK shared acceleration",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Move script values between the host and the client without losing type identity, with acceleration that is never load-bearing for correctness.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "script.eval",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "adapter_internal_script_codec",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Correctness semantics do not depend on a native acceleration lane; the hash-pinned ES3 ESON runtime is the production correctness surface.",
+                                                              "Optional acceleration is permitted only when it preserves identical codec semantics and therefore is intentionally not an agent-visible capability toggle.",
+                                                              "The codec is hash-pinned and namespaced so it cannot clobber unrelated shared JSON or ESPACK state in the host engine."
+                                                          ],
+                         "semanticFixtures":  [
+                                                  "script-eval/int-result"
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorScriptEvalTests.cs",
+                                              "symbol":  "IllustratorScriptEvalTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "evidence/script-eval-eson-live-2026-09-24.json",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "--examples / command reference",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Give an agent accurate, machine-readable examples and descriptions that cannot drift from the parser.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "core.operations.list",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.operation.describe",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.operation.examples",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "ISelfDescription",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Human-oriented Markdown command reference is not the discovery authority; the runtime catalog and machine-readable example registry are.",
+                                                              "Example target/lease/mutation metadata is derived from the live OperationDefinition instead of being authored independently."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationExamplesTests.cs",
+                                              "symbol":  "OperationExamplesTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationCatalogIntegrationTests.cs",
+                                              "symbol":  "OperationCatalogIntegrationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeOperationRoutingTests.cs",
+                                              "symbol":  "RuntimeOperationRoutingTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "COM lookup SQLite/JSON index",
+                         "matrixClassification":  "preserve",
+                         "capability":  "Search a versioned type-library inventory for interfaces, signatures, enums, and interface paths.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "knowledge.describe",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "knowledge.search",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "knowledge.symbol",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "knowledge.enum",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "knowledge.paths",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IKnowledgePack",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "The runtime never opens the legacy SQLite or multi-megabyte JSON inventory at request time; it serves a deterministic SHA-verified embedded pack generated offline from the authoritative SQLite/manifest revision.",
+                                                              "The build-machine Illustrator version is explicitly non-authoritative; the inventory host version remains unknown unless the source manifest itself declares one."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Knowledge.Tests/KnowledgePackReaderTests.cs",
+                                              "symbol":  "KnowledgePackReaderTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Knowledge.Tests/IllustratorComKnowledgeServiceTests.cs",
+                                              "symbol":  "IllustratorComKnowledgeServiceTests"
+                                          },
+                                          {
+                                              "kind":  "evidence",
+                                              "path":  "scripts/build-knowledge-pack.mjs",
+                                              "symbol":  null
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "SendScriptMessage / plugin calls",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Reach a native plug-in that exposes a compatible messaging contract, with durable truth about side effects.",
+                         "state":  "implemented",
+                         "capabilityDisposition":  "retained",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "plugin.message",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IPluginMessaging",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "An ambiguous plug-in message becomes a durable mutation incident requiring explicit reconciliation instead of a retryable error.",
+                                                              "The bridge is explicitly not arbitrary native debugger access."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorPluginMessageTests.cs",
+                                              "symbol":  "IllustratorPluginMessageTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationCatalogIntegrationTests.cs",
+                                              "symbol":  "OperationCatalogIntegrationTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "menu/action fallback routing",
+                         "matrixClassification":  "preserve",
+                         "capability":  "Choose explicitly among direct COM, injected JSX, action, and native plug-in routes, without hidden heuristics.",
+                         "state":  "superseded",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "com.set",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "com.call",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "script.eval",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "script.runFile",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "illustrator.action.run",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "illustrator.menu.execute",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "plugin.message",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.operations.list",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "core.target.capabilities",
+                                                  "production":  true,
+                                                  "kind":  "operation"
+                                              },
+                                              {
+                                                  "name":  "IExecutionRoutePlanner",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "V2 deliberately has no hidden fallback chain. The caller selects an explicit registered route after catalog and live-target capability discovery.",
+                                                              "Undocumented menu strings are never silently substituted for a failed COM/script/action route.",
+                                                              "Each route retains its own mutation class, lease, replay, watchdog, and reconciliation semantics."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationCatalogIntegrationTests.cs",
+                                              "symbol":  "OperationCatalogIntegrationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorActionRunTests.cs",
+                                              "symbol":  "IllustratorActionRunTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorMenuCommandTests.cs",
+                                              "symbol":  "IllustratorMenuCommandTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Hosts.Illustrator.Tests/IllustratorPluginMessageTests.cs",
+                                              "symbol":  "IllustratorPluginMessageTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "cross-agent persisted JSON records",
+                         "matrixClassification":  "drop",
+                         "capability":  "Cross-process durable records that survive concurrent writers without silently resetting on corruption.",
+                         "state":  "superseded",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "IRuntimeStore",
+                                                  "production":  false,
+                                                  "kind":  "facet"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "The V2 store is private to the V2 runtime and is intentionally not a shared record format with the legacy tool. An agent must not hand-edit V2 state files.",
+                                                              "Corrupt state is quarantined, not treated as missing and silently overwritten."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/RuntimeStateLayoutTests.cs",
+                                              "symbol":  "RuntimeStateLayoutTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Supervisor.Tests/WorkflowJobStoreTests.cs",
+                                              "symbol":  "WorkflowJobStoreTests"
+                                          }
+                                      ]
+                     },
+                     {
+                         "legacySurface":  "validation script",
+                         "matrixClassification":  "redesign",
+                         "capability":  "Validate the highest-risk implementation surface, not just documentation assets.",
+                         "state":  "superseded",
+                         "capabilityDisposition":  "replaced_by_stronger_abstraction",
+                         "v2Operations":  [
+                                              {
+                                                  "name":  "conformance test suite",
+                                                  "production":  false,
+                                                  "kind":  "type"
+                                              }
+                                          ],
+                         "missingAspects":  [
+
+                                            ],
+                         "intentionalIncompatibilities":  [
+                                                              "Validation is a per-project unit, fake-host, live-host, and adapter test suite rather than one script that inspects Markdown.",
+                                                              "The legacy validator did not validate the comtool implementation; that gap is not reproduced."
+                                                          ],
+                         "semanticFixtures":  [
+
+                                              ],
+                         "evidence":  [
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Runtime.Tests/OperationCatalogIntegrationTests.cs",
+                                              "symbol":  "OperationCatalogIntegrationTests"
+                                          },
+                                          {
+                                              "kind":  "test",
+                                              "path":  "tests/ComTool.Transport.Stdio.Tests/CrossTransportParityTests.cs",
+                                              "symbol":  "CrossTransportParityTests"
+                                          }
+                                      ]
+                     }
+                 ]
+}

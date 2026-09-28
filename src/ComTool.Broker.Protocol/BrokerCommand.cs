@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using ComTool.Hosts.Abstractions;
 using ComTool.Protocol;
 
 namespace ComTool.Broker.Protocol;
@@ -12,4 +13,5 @@ public sealed record BrokerCommand
     public required BrokerCommandKind Kind { get; init; }
     public MutationClass? MutationClass { get; init; }
     public OperationRequest? Operation { get; init; }
+    public HostLaunchSpec? Launch { get; init; }
 }

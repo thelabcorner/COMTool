@@ -165,6 +165,137 @@ public sealed class RuntimeStateLayoutTests : IDisposable
     }
 
     [Fact]
+    public async Task RuntimeOperationCatalogIsSelfDescribingWithoutHostDiscovery()
+    {
+        await using var runtime = new RuntimeSupervisor(
+            ["illustrator"],
+            new WorkerBrokerOptions
+            {
+                WorkerExecutablePath =
+                    Path.Combine(_root, "unused-worker.exe")
+            },
+            _root);
+
+        using var nullInput = JsonDocument.Parse("null");
+        var listed = await runtime.ExecuteAsync(
+            new OperationRequest
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = "operations-list",
+                Operation = "core.operations.list",
+                Input = nullInput.RootElement.Clone()
+            });
+
+        Assert.True(listed.Ok, listed.Error?.Message);
+        var operations = listed.Result!.Value!.Value;
+        Assert.Equal(JsonValueKind.Array, operations.ValueKind);
+        var scriptEval = operations
+            .EnumerateArray()
+            .Single(entry =>
+                entry.GetProperty("name").GetString() == "script.eval");
+        Assert.Equal(
+            "unknown",
+            scriptEval.GetProperty("mutationClass").GetString());
+        Assert.Equal(
+            "host",
+            scriptEval.GetProperty("executionScope").GetString());
+        Assert.Equal(
+            "illustrator",
+            scriptEval.GetProperty("host").GetString());
+        Assert.True(
+            scriptEval.GetProperty("requiresLease").GetBoolean());
+        Assert.Equal(
+            "declared_or_unknown",
+            scriptEval.GetProperty("mutationResolution").GetString());
+
+        var policyLimits = scriptEval.GetProperty("policyLimits");
+        Assert.Equal(
+            OperationPolicy.MinWorkerWatchdogMs,
+            policyLimits.GetProperty("workerWatchdogMs")
+                .GetProperty("min")
+                .GetInt32());
+        Assert.Equal(
+            OperationPolicy.MaxWorkerWatchdogMs,
+            policyLimits.GetProperty("workerWatchdogMs")
+                .GetProperty("max")
+                .GetInt32());
+        Assert.Equal(
+            OperationPolicy.MinRetryBudgetMs,
+            policyLimits.GetProperty("retryBudgetMs")
+                .GetProperty("min")
+                .GetInt32());
+        Assert.Equal(
+            OperationPolicy.MaxRetryBudgetMs,
+            policyLimits.GetProperty("retryBudgetMs")
+                .GetProperty("max")
+                .GetInt32());
+        Assert.Equal(
+            OperationPolicy.DefaultRetryBudgetMs,
+            policyLimits.GetProperty("retryBudgetMs")
+                .GetProperty("default")
+                .GetInt32());
+
+        using var describeInput = JsonDocument.Parse(
+            """{"name":"core.target.host.terminate"}""");
+        var described = await runtime.ExecuteAsync(
+            new OperationRequest
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = "operation-describe",
+                Operation = "core.operation.describe",
+                Input = describeInput.RootElement.Clone()
+            });
+
+        Assert.True(described.Ok, described.Error?.Message);
+        var descriptor = described.Result!.Value!.Value;
+        Assert.Equal(
+            "external_side_effect",
+            descriptor.GetProperty("mutationClass").GetString());
+        Assert.Equal(
+            "runtime",
+            descriptor.GetProperty("executionScope").GetString());
+        Assert.True(
+            descriptor.GetProperty("requiresTarget").GetBoolean());
+        Assert.True(
+            descriptor.GetProperty("requiresLease").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RuntimeOperationDescribeRejectsUnknownNameWithoutHostDiscovery()
+    {
+        await using var runtime = new RuntimeSupervisor(
+            ["illustrator"],
+            new WorkerBrokerOptions
+            {
+                WorkerExecutablePath =
+                    Path.Combine(_root, "unused-worker.exe")
+            },
+            _root);
+
+        using var input = JsonDocument.Parse(
+            """{"name":"plugin.future.missing"}""");
+        var result = await runtime.ExecuteAsync(
+            new OperationRequest
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = "operation-describe-missing",
+                Operation = "core.operation.describe",
+                Input = input.RootElement.Clone()
+            });
+
+        Assert.False(result.Ok);
+        Assert.Equal(
+            OperationStatus.UnsupportedOperation,
+            result.Status);
+        Assert.Equal(
+            "unsupported_operation",
+            result.Error?.Kind);
+        Assert.Equal(
+            ExecutionState.NotStarted,
+            result.Error?.Execution);
+    }
+
+    [Fact]
     public async Task RuntimeIncidentsListDoesNotRequireLiveTargetDiscovery()
     {
         HostTargetDescriptor target;
@@ -217,8 +348,7 @@ public sealed class RuntimeStateLayoutTests : IDisposable
             ["illustrator"],
             new WorkerBrokerOptions
             {
-                WorkerExecutablePath =
-                    Path.Combine(_root, "unused-worker.exe")
+                WorkerExecutablePath = ResolveTestWorkerExecutable()
             },
             _root);
 
@@ -250,6 +380,34 @@ public sealed class RuntimeStateLayoutTests : IDisposable
         Assert.False(
             incident.GetProperty("recordCorrupt").GetBoolean());
 
+        var offlineResolutionInput =
+            JsonSerializer.SerializeToElement(new
+            {
+                targetId = target.Identity.TargetId,
+                incidentRequestId = request.Id,
+                expectedUpdatedAt =
+                    incident.GetProperty("updatedAt").GetString(),
+                resolution = "known_unchanged",
+                rationale =
+                    "The recorded target generation is no longer running; external inspection established that the intended change is absent."
+            });
+        var resolved = await runtime.ExecuteAsync(
+            new OperationRequest
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = "resolve-offline-incident",
+                Operation = "core.incident.resolve",
+                Input = offlineResolutionInput
+            });
+
+        Assert.True(resolved.Ok, resolved.Error?.Message);
+        Assert.Equal(TargetState.Unavailable, resolved.TargetState);
+        Assert.Equal(
+            "known_unchanged",
+            resolved.Result!.Value!.Value
+                .GetProperty("resolution")
+                .GetString());
+
         var health = await runtime.ExecuteAsync(
             new OperationRequest
             {
@@ -259,7 +417,7 @@ public sealed class RuntimeStateLayoutTests : IDisposable
                 Input = nullInput.RootElement.Clone()
             });
         Assert.Equal(
-            1,
+            0,
             health.Result!.Value!.Value
                 .GetProperty("activeIncidents")
                 .GetInt32());
@@ -278,5 +436,39 @@ public sealed class RuntimeStateLayoutTests : IDisposable
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    private static string ResolveTestWorkerExecutable()
+    {
+        var candidates = new[]
+        {
+            Path.GetFullPath(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "..",
+                    "..",
+                    "ComTool.Worker",
+                    "release",
+                    "ComTool.Worker.exe")),
+            Path.GetFullPath(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "..",
+                    "..",
+                    "..",
+                    "..",
+                    "..",
+                    "src",
+                    "ComTool.Worker",
+                    "bin",
+                    "Release",
+                    "net10.0-windows",
+                    "ComTool.Worker.exe"))
+        };
+
+        return candidates.FirstOrDefault(File.Exists)
+            ?? throw new FileNotFoundException(
+                "ComTool.Worker.exe was not built for the supervisor integration test.",
+                candidates[0]);
     }
 }

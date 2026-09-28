@@ -4,6 +4,7 @@
     <Project Path="src/ComTool.Cli/ComTool.Cli.csproj" />
     <Project Path="src/ComTool.Hosts.Abstractions/ComTool.Hosts.Abstractions.csproj" />
     <Project Path="src/ComTool.Hosts.Illustrator/ComTool.Hosts.Illustrator.csproj" />
+    <Project Path="src/ComTool.Knowledge/ComTool.Knowledge.csproj" />
     <Project Path="src/ComTool.Protocol/ComTool.Protocol.csproj" />
     <Project Path="src/ComTool.Runtime/ComTool.Runtime.csproj" />
     <Project Path="src/ComTool.Runtime.Ipc/ComTool.Runtime.Ipc.csproj" />
@@ -16,6 +17,8 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ComTool.Hosts.Illustrator.Tests/ComTool.Hosts.Illustrator.Tests.csproj" />
+    <Project Path="tests/ComTool.Knowledge.Tests/ComTool.Knowledge.Tests.csproj" />
+    <Project Path="tests/ComTool.Migration.Parity.Tests/ComTool.Migration.Parity.Tests.csproj" />
     <Project Path="tests/ComTool.Protocol.Tests/ComTool.Protocol.Tests.csproj" />
     <Project Path="tests/ComTool.Runtime.Ipc.Tests/ComTool.Runtime.Ipc.Tests.csproj" />
     <Project Path="tests/ComTool.Runtime.Tests/ComTool.Runtime.Tests.csproj" />
@@ -27,6 +30,7 @@
   <Folder Name="/tools/">
     <Project Path="tools/ComTool.Illustrator.LiveConformance/ComTool.Illustrator.LiveConformance.csproj" />
     <Project Path="tools/ComTool.Illustrator.Snapshot.Smoke/ComTool.Illustrator.Snapshot.Smoke.csproj" />
+    <Project Path="tools/ComTool.Migration.Parity/ComTool.Migration.Parity.csproj" />
     <Project Path="tools/ComTool.RuntimeHost.Smoke/ComTool.RuntimeHost.Smoke.csproj" />
     <Project Path="tools/ComTool.Supervisor.Smoke/ComTool.Supervisor.Smoke.csproj" />
     <Project Path="tools/schema-validator/SchemaValidator.csproj" />

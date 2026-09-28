@@ -17,5 +17,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\ComTool.Supervisor\ComTool.Supervisor.csproj" />
+    <ProjectReference Include="..\..\src\ComTool.Worker\ComTool.Worker.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

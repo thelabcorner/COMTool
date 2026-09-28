@@ -11,8 +11,12 @@ namespace ComTool.Broker.Protocol;
 [JsonSerializable(typeof(WorkerHelloAck))]
 [JsonSerializable(typeof(BrokerCommand))]
 [JsonSerializable(typeof(BrokerResponse))]
+[JsonSerializable(typeof(BrokerArtifactChunk))]
+[JsonSerializable(typeof(BrokerArtifactTransfer))]
 [JsonSerializable(typeof(BrokerReconciliation))]
 [JsonSerializable(typeof(BrokerWorkerStatus))]
 [JsonSerializable(typeof(HostTargetDescriptor))]
 [JsonSerializable(typeof(HostTargetDescriptor[]))]
+[JsonSerializable(typeof(HostLaunchSpec))]
+[JsonSerializable(typeof(HostLaunchObservation))]
 public partial class BrokerJsonContext : JsonSerializerContext;

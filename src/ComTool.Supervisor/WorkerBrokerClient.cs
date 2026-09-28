@@ -2,10 +2,12 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using ComTool.Broker.Protocol;
 using ComTool.Hosts.Abstractions;
 using ComTool.Protocol;
 using ComTool.Runtime;
+using ComTool.Runtime.Artifacts;
 using ComTool.Transport.Pipe;
 
 namespace ComTool.Supervisor;
@@ -124,6 +126,10 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
             startInfo.ArgumentList.Add(target.Identity.Host);
             startInfo.ArgumentList.Add("--target");
             startInfo.ArgumentList.Add(target.Identity.TargetId);
+            startInfo.ArgumentList.Add("--max-frame-bytes");
+            startInfo.ArgumentList.Add(
+                options.MaxFrameBytes.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
             startInfo.Environment[TokenEnvironmentVariable] = token;
 
             process = Process.Start(startInfo)
@@ -250,6 +256,21 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
         TimeSpan? watchdog = null,
         CancellationToken cancellationToken = default)
     {
+        var outcome =
+            await ExecuteWithOutcomeAsync(
+                    request,
+                    watchdog,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        return outcome.Result;
+    }
+
+    internal async Task<WorkerOperationOutcome>
+        ExecuteWithOutcomeAsync(
+            OperationRequest request,
+            TimeSpan? watchdog = null,
+            CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(request);
         ThrowIfDisposed();
 
@@ -257,31 +278,37 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
 
         if (request.ProtocolVersion != ProtocolVersion.Current)
         {
-            return InvalidRequest(
-                request,
-                "unsupported_protocol_version",
-                $"Protocol version {request.ProtocolVersion} is not supported.",
-                ExecutionState.NotStarted);
+            return new WorkerOperationOutcome(
+                InvalidRequest(
+                    request,
+                    "unsupported_protocol_version",
+                    $"Protocol version {request.ProtocolVersion} is not supported.",
+                    ExecutionState.NotStarted),
+                NotStartedCertified: true);
         }
 
         if (request.Preconditions is { Count: > 0 } ||
             request.Postconditions is { Count: > 0 })
         {
-            return InvalidRequest(
-                request,
-                "conditions_require_runtime_supervisor",
-                "Preconditions and postconditions must be orchestrated by the runtime supervisor and cannot be dispatched directly to a worker.",
-                ExecutionState.NotStarted);
+            return new WorkerOperationOutcome(
+                InvalidRequest(
+                    request,
+                    "conditions_require_runtime_supervisor",
+                    "Preconditions and postconditions must be orchestrated by the runtime supervisor and cannot be dispatched directly to a worker.",
+                    ExecutionState.NotStarted),
+                NotStartedCertified: true);
         }
 
         if (!BuiltInOperations.Catalog.TryGet(request.Operation, out var definition))
         {
-            return InvalidRequest(
-                request,
-                "unsupported_operation",
-                $"Operation '{request.Operation}' is not registered.",
-                ExecutionState.NotStarted,
-                OperationStatus.UnsupportedOperation);
+            return new WorkerOperationOutcome(
+                InvalidRequest(
+                    request,
+                    "unsupported_operation",
+                    $"Operation '{request.Operation}' is not registered.",
+                    ExecutionState.NotStarted,
+                    OperationStatus.UnsupportedOperation),
+                NotStartedCertified: true);
         }
 
         if (definition.RequiresTarget &&
@@ -295,11 +322,13 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
                  _target.Identity.Host,
                  StringComparison.Ordinal)))
         {
-            return InvalidRequest(
-                request,
-                "target_mismatch",
-                "Request target does not match this brokered target.",
-                ExecutionState.NotStarted);
+            return new WorkerOperationOutcome(
+                InvalidRequest(
+                    request,
+                    "target_mismatch",
+                    "Request target does not match this brokered target.",
+                    ExecutionState.NotStarted),
+                NotStartedCertified: true);
         }
 
         MutationClass mutationClass;
@@ -311,11 +340,13 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
         }
         catch (OperationMutationPolicyException ex)
         {
-            return InvalidRequest(
-                request,
-                ex.Kind,
-                ex.Message,
-                ExecutionState.NotStarted);
+            return new WorkerOperationOutcome(
+                InvalidRequest(
+                    request,
+                    ex.Kind,
+                    ex.Message,
+                    ExecutionState.NotStarted),
+                NotStartedCertified: true);
         }
 
         try
@@ -324,32 +355,34 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
         }
         catch (TargetStateException ex)
         {
-            return new OperationResult
-            {
-                ProtocolVersion = ProtocolVersion.Current,
-                Id = request.Id,
-                Operation = request.Operation,
-                Ok = false,
-                Status = ex.TargetState == TargetState.ReconciliationRequired
-                    ? OperationStatus.ReconciliationRequired
-                    : ex.TargetState == TargetState.Unavailable
-                        ? OperationStatus.TargetUnavailable
-                        : OperationStatus.HostBusy,
-                TargetState = ex.TargetState,
-                Error = new ProtocolError
+            return new WorkerOperationOutcome(
+                new OperationResult
                 {
-                    Kind = ex.Kind,
-                    Message = ex.Message,
-                    Retryable = ex.Retryable,
-                    Execution = ExecutionState.NotStarted,
-                    SuggestedActions =
-                        ex.TargetState == TargetState.ReconciliationRequired
-                            ? ["reconcile_target_before_mutation"]
-                            : ["ping_or_reconnect_target"]
+                    ProtocolVersion = ProtocolVersion.Current,
+                    Id = request.Id,
+                    Operation = request.Operation,
+                    Ok = false,
+                    Status = ex.TargetState == TargetState.ReconciliationRequired
+                        ? OperationStatus.ReconciliationRequired
+                        : ex.TargetState == TargetState.Unavailable
+                            ? OperationStatus.TargetUnavailable
+                            : OperationStatus.HostBusy,
+                    TargetState = ex.TargetState,
+                    Error = new ProtocolError
+                    {
+                        Kind = ex.Kind,
+                        Message = ex.Message,
+                        Retryable = ex.Retryable,
+                        Execution = ExecutionState.NotStarted,
+                        SuggestedActions =
+                            ex.TargetState == TargetState.ReconciliationRequired
+                                ? ["reconcile_target_before_mutation"]
+                                : ["ping_or_reconnect_target"]
+                    },
+                    Timing = new OperationTiming(
+                        TotalMs: totalClock.Elapsed.TotalMilliseconds)
                 },
-                Timing = new OperationTiming(
-                    TotalMs: totalClock.Elapsed.TotalMilliseconds)
-            };
+                NotStartedCertified: true);
         }
 
         BrokerRoundTrip roundTrip;
@@ -368,35 +401,39 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
             ApplyDispatchFailure(mutationClass, ex);
 
             var targetState = _state.Snapshot().State;
-            return new OperationResult
-            {
-                ProtocolVersion = ProtocolVersion.Current,
-                Id = request.Id,
-                Operation = request.Operation,
-                Ok = false,
-                Status = targetState == TargetState.ReconciliationRequired
-                    ? OperationStatus.ReconciliationRequired
-                    : OperationStatus.TargetUnavailable,
-                TargetState = targetState,
-                Error = new ProtocolError
+            return new WorkerOperationOutcome(
+                new OperationResult
                 {
-                    Kind = ex.Kind,
-                    Message = ex.Message,
-                    Retryable = false,
-                    Execution = ex.Execution,
-                    HResult = ex.HResultCode,
-                    HResultHex = ex.HResultCode is null
-                        ? null
-                        : $"0x{unchecked((uint)ex.HResultCode.Value):X8}",
-                    SuggestedActions =
-                        targetState == TargetState.ReconciliationRequired
-                            ? ["relaunch_worker", "reconcile_target_before_mutation"]
-                            : ["relaunch_worker"]
+                    ProtocolVersion = ProtocolVersion.Current,
+                    Id = request.Id,
+                    Operation = request.Operation,
+                    Ok = false,
+                    Status = targetState == TargetState.ReconciliationRequired
+                        ? OperationStatus.ReconciliationRequired
+                        : OperationStatus.TargetUnavailable,
+                    TargetState = targetState,
+                    Error = new ProtocolError
+                    {
+                        Kind = ex.Kind,
+                        Message = ex.Message,
+                        Retryable = false,
+                        Execution = ex.Execution,
+                        HResult = ex.HResultCode,
+                        HResultHex = ex.HResultCode is null
+                            ? null
+                            : $"0x{unchecked((uint)ex.HResultCode.Value):X8}",
+                        SuggestedActions =
+                            targetState == TargetState.ReconciliationRequired
+                                ? ["relaunch_worker", "reconcile_target_before_mutation"]
+                                : ["relaunch_worker"]
+                    },
+                    Timing = new OperationTiming(
+                        QueueMs: ex.QueueMs,
+                        TotalMs: totalClock.Elapsed.TotalMilliseconds)
                 },
-                Timing = new OperationTiming(
-                    QueueMs: ex.QueueMs,
-                    TotalMs: totalClock.Elapsed.TotalMilliseconds)
-            };
+                NotStartedCertified:
+                    ex.Execution ==
+                    ExecutionState.NotStarted);
         }
 
         var response = roundTrip.Response;
@@ -404,20 +441,34 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
         if (response.OperationResult is not null)
         {
             var result = response.OperationResult;
-            ApplyOperationOutcome(mutationClass, result);
+            ApplyOperationOutcome(
+                _state,
+                mutationClass,
+                result);
 
             var state = _state.Snapshot().State;
             var timing = result.Timing ?? new OperationTiming();
 
-            return result with
-            {
-                TargetState = state,
-                Timing = timing with
+            var returnedResult =
+                result with
                 {
-                    QueueMs = roundTrip.QueueMs,
-                    TotalMs = totalClock.Elapsed.TotalMilliseconds
-                }
-            };
+                    TargetState = state,
+                    Timing = timing with
+                    {
+                        QueueMs = roundTrip.QueueMs,
+                        TotalMs = totalClock.Elapsed.TotalMilliseconds
+                    }
+                };
+            var certifiedNotStarted =
+                response.OperationExecutionDisposition ==
+                BrokerOperationExecutionDisposition
+                    .CertifiedNotStarted &&
+                returnedResult.Error?.Execution ==
+                ExecutionState.NotStarted;
+
+            return new WorkerOperationOutcome(
+                returnedResult,
+                certifiedNotStarted);
         }
 
         var brokerError = response.Error ?? new ProtocolError
@@ -435,21 +486,28 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
                 brokerError.Kind);
 
         var brokerState = _state.Snapshot().State;
-        return new OperationResult
-        {
-            ProtocolVersion = ProtocolVersion.Current,
-            Id = request.Id,
-            Operation = request.Operation,
-            Ok = false,
-            Status = brokerState == TargetState.ReconciliationRequired
-                ? OperationStatus.ReconciliationRequired
-                : OperationStatus.Failed,
-            TargetState = brokerState,
-            Error = brokerError,
-            Timing = new OperationTiming(
-                QueueMs: roundTrip.QueueMs,
-                TotalMs: totalClock.Elapsed.TotalMilliseconds)
-        };
+        return new WorkerOperationOutcome(
+            new OperationResult
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = request.Id,
+                Operation = request.Operation,
+                Ok = false,
+                Status = brokerState == TargetState.ReconciliationRequired
+                    ? OperationStatus.ReconciliationRequired
+                    : OperationStatus.Failed,
+                TargetState = brokerState,
+                Error = brokerError,
+                Timing = new OperationTiming(
+                    QueueMs: roundTrip.QueueMs,
+                    TotalMs: totalClock.Elapsed.TotalMilliseconds)
+            },
+            NotStartedCertified:
+                response.OperationExecutionDisposition ==
+                BrokerOperationExecutionDisposition
+                    .CertifiedNotStarted &&
+                brokerError.Execution ==
+                ExecutionState.NotStarted);
     }
 
     public async Task<BrokerReconciliation> ReconcileAsync(
@@ -510,6 +568,12 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
             throw;
         }
     }
+
+    internal Task ForceTerminateAsync(
+        CancellationToken cancellationToken = default) =>
+        TerminateOwnedProcessAsync(
+            _process,
+            cancellationToken);
 
     public async ValueTask DisposeAsync()
     {
@@ -603,26 +667,56 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
 
                 _sequence = sequence;
 
-                using var responseFrame = await _framed
-                    .ReadAsync(commandCts.Token)
-                    .ConfigureAwait(false);
-
-                var response = BrokerJson.DeserializeResponse(responseFrame.Span);
-                if (response.BrokerVersion != BrokerVersion.Current ||
-                    response.Sequence != sequence ||
-                    !string.Equals(
-                        response.RequestId,
-                        requestId,
-                        StringComparison.Ordinal))
+                BrokerArtifactTransferAccumulator? transfer = null;
+                while (true)
                 {
-                    throw new WorkerDispatchException(
-                        "broker_protocol_violation",
-                        "Worker response correlation/version check failed.",
-                        ExecutionState.Ambiguous,
-                        queueMs: queueMs);
-                }
+                    using var responseFrame = await _framed
+                        .ReadAsync(commandCts.Token)
+                        .ConfigureAwait(false);
 
-                return new BrokerRoundTrip(response, queueMs);
+                    var response =
+                        BrokerJson.DeserializeResponse(responseFrame.Span);
+                    if (response.BrokerVersion != BrokerVersion.Current ||
+                        response.Sequence != sequence ||
+                        !string.Equals(
+                            response.RequestId,
+                            requestId,
+                            StringComparison.Ordinal))
+                    {
+                        throw new InvalidDataException(
+                            "Worker response correlation/version check failed.");
+                    }
+
+                    if (response.Kind ==
+                        BrokerResponseKind.ArtifactChunk)
+                    {
+                        if (kind != BrokerCommandKind.Operation)
+                        {
+                            throw new InvalidDataException(
+                                "Artifact chunks are valid only for operation responses.");
+                        }
+
+                        transfer ??=
+                            new BrokerArtifactTransferAccumulator();
+                        transfer.Append(response);
+                        continue;
+                    }
+
+                    if (transfer is not null ||
+                        response.ArtifactTransfer is not null)
+                    {
+                        if (kind != BrokerCommandKind.Operation ||
+                            transfer is null)
+                        {
+                            throw new InvalidDataException(
+                                "Worker artifact-transfer metadata did not match a chunked operation response.");
+                        }
+
+                        response = transfer.Complete(response);
+                    }
+
+                    return new BrokerRoundTrip(response, queueMs);
+                }
             }
             catch (OperationCanceledException ex)
                 when (dispatchBegan)
@@ -644,7 +738,10 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
                     innerException: ex);
             }
             catch (Exception ex)
-                when (ex is IOException or EndOfStreamException or InvalidDataException)
+                when (ex is IOException or
+                    EndOfStreamException or
+                    InvalidDataException or
+                    JsonException)
             {
                 await KillOwnedWorkerAsync(CancellationToken.None)
                     .ConfigureAwait(false);
@@ -685,34 +782,50 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
             mutationClass);
     }
 
-    private void ApplyOperationOutcome(
+    internal static void ApplyOperationOutcome(
+        TargetStateMachine state,
         MutationClass mutationClass,
         OperationResult result)
     {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(result);
+
         if (result.Ok)
         {
-            _state.MarkCompleted(mutationClass);
+            state.MarkCompleted(mutationClass);
             return;
         }
 
-        if (result.Error?.Execution == ExecutionState.Ambiguous)
+        var execution = result.Error?.Execution;
+        if (execution == ExecutionState.Ambiguous ||
+            execution == ExecutionState.Started &&
+            mutationClass != MutationClass.ReadOnly)
         {
-            _state.MarkAmbiguousExecution(
+            state.MarkAmbiguousExecution(
                 mutationClass,
-                result.Error.Kind);
+                result.Error?.Kind ??
+                "host_reported_ambiguous_execution");
             return;
         }
 
         switch (result.TargetState)
         {
+            case TargetState.KnownChanged
+                when mutationClass != MutationClass.ReadOnly:
+                // A host can prove that a mutating call completed and changed
+                // state even when result delivery itself is rejected (for
+                // example, an oversized plug-in reply). Preserve the known
+                // mutation without escalating it into ambiguity.
+                state.MarkCompleted(mutationClass);
+                break;
             case TargetState.Busy:
-                _state.MarkBusy();
+                state.MarkBusy();
                 break;
             case TargetState.Unavailable:
-                _state.MarkHostUnavailable(result.Error?.Kind ?? "host_unavailable");
+                state.MarkHostUnavailable(result.Error?.Kind ?? "host_unavailable");
                 break;
             case TargetState.ReconciliationRequired:
-                _state.MarkAmbiguousExecution(
+                state.MarkAmbiguousExecution(
                     mutationClass,
                     result.Error?.Kind ?? "host_reported_ambiguity");
                 break;
@@ -884,6 +997,160 @@ public sealed class WorkerBrokerClient : IAsyncDisposable
     private sealed record BrokerRoundTrip(
         BrokerResponse Response,
         double QueueMs);
+}
+
+internal sealed record WorkerOperationOutcome(
+    OperationResult Result,
+    bool NotStartedCertified);
+
+internal sealed class BrokerArtifactTransferAccumulator
+{
+    private static readonly int MaxChunkCount = checked(
+        (int)((ArtifactStoreOptions.DefaultMaxArtifactByteCount +
+               BrokerArtifactTransferLimits.ChunkByteCount - 1) /
+              BrokerArtifactTransferLimits.ChunkByteCount));
+
+    private readonly MemoryStream _payload = new();
+    private string? _transferId;
+    private int _nextChunkIndex;
+
+    public void Append(BrokerResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        if (response.Kind != BrokerResponseKind.ArtifactChunk ||
+            !response.Ok ||
+            response.ArtifactChunk is not { } chunk ||
+            response.ArtifactTransfer is not null ||
+            response.OperationResult is not null ||
+            response.Error is not null)
+        {
+            throw new InvalidDataException(
+                "Malformed broker artifact-chunk response.");
+        }
+
+        if (string.IsNullOrWhiteSpace(chunk.TransferId) ||
+            !Guid.TryParseExact(
+                chunk.TransferId,
+                "N",
+                out _) ||
+            chunk.Data is not { Length: > 0 } data ||
+            data.Length >
+                BrokerArtifactTransferLimits.ChunkByteCount)
+        {
+            throw new InvalidDataException(
+                "Broker artifact chunk has invalid transfer identity or size.");
+        }
+
+        if (_transferId is null)
+            _transferId = chunk.TransferId;
+        else if (!string.Equals(
+                     _transferId,
+                     chunk.TransferId,
+                     StringComparison.Ordinal))
+            throw new InvalidDataException(
+                "Broker artifact transfer id changed mid-stream.");
+
+        if (chunk.ChunkIndex != _nextChunkIndex)
+            throw new InvalidDataException(
+                $"Broker artifact chunk index {chunk.ChunkIndex} was received; expected {_nextChunkIndex}.");
+
+        if (_nextChunkIndex >= MaxChunkCount)
+            throw new InvalidDataException(
+                "Broker artifact transfer exceeded the bounded chunk-count ceiling.");
+
+        if (_payload.Length + data.LongLength >
+            ArtifactStoreOptions.DefaultMaxArtifactByteCount)
+        {
+            throw new InvalidDataException(
+                "Broker artifact transfer exceeded the runtime artifact ceiling.");
+        }
+
+        _payload.Write(data);
+        _nextChunkIndex++;
+    }
+
+    public BrokerResponse Complete(BrokerResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        var transfer = response.ArtifactTransfer;
+        var operation = response.OperationResult;
+        if (response.Kind != BrokerResponseKind.Operation ||
+            !response.Ok ||
+            operation is not { Ok: true, Result: null } ||
+            transfer is null ||
+            response.ArtifactChunk is not null ||
+            _transferId is null)
+        {
+            throw new InvalidDataException(
+                "Malformed final broker artifact-transfer response.");
+        }
+
+        if (!string.Equals(
+                _transferId,
+                transfer.TransferId,
+                StringComparison.Ordinal) ||
+            transfer.ChunkCount != _nextChunkIndex ||
+            transfer.ChunkCount <= 0 ||
+            transfer.ChunkCount > MaxChunkCount ||
+            transfer.PayloadByteCount <= 0 ||
+            transfer.PayloadByteCount != _payload.Length ||
+            transfer.PayloadByteCount >
+                ArtifactStoreOptions.DefaultMaxArtifactByteCount ||
+            string.IsNullOrWhiteSpace(transfer.PayloadSha256) ||
+            transfer.PayloadSha256.Length != 64 ||
+            string.IsNullOrWhiteSpace(transfer.OriginalResultKind))
+        {
+            throw new InvalidDataException(
+                "Broker artifact-transfer metadata does not match the received chunks.");
+        }
+
+        var payload = _payload.ToArray();
+        var actualSha256 = Convert
+            .ToHexString(SHA256.HashData(payload))
+            .ToLowerInvariant();
+        if (!string.Equals(
+                actualSha256,
+                transfer.PayloadSha256,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                "Broker artifact-transfer SHA-256 mismatch.");
+        }
+
+        ProtocolValue restored;
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            restored = ProtocolValue.From(
+                document.RootElement.Clone());
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException(
+                "Broker artifact-transfer payload is not valid JSON.",
+                ex);
+        }
+
+        if (!string.Equals(
+                restored.Kind,
+                transfer.OriginalResultKind,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                "Broker artifact-transfer result kind does not match its metadata.");
+        }
+
+        return response with
+        {
+            ArtifactTransfer = null,
+            OperationResult = operation with
+            {
+                Result = restored
+            }
+        };
+    }
 }
 
 public sealed class WorkerDispatchException : Exception

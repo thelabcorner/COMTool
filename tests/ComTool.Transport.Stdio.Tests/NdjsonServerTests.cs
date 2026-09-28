@@ -157,6 +157,71 @@ public sealed class NdjsonServerTests
             result.GetProperty("value").GetString());
     }
 
+    [Fact]
+    public async Task BlockedRequestDoesNotPreventLaterFrameFromDispatching()
+    {
+        var input =
+            Join(
+                Request("slow", "1"),
+                Request("fast", "2"));
+
+        await using var rawInput =
+            new MemoryStream(
+                Encoding.UTF8.GetBytes(input),
+                writable: false);
+        await using var output =
+            new MemoryStream();
+
+        var dispatcher =
+            new BlockingDispatcher();
+        var server =
+            new NdjsonServer(
+                dispatcher,
+                maxConcurrentRequests: 2);
+
+        var runTask =
+            server.RunAsync(
+                rawInput,
+                output);
+
+        await dispatcher.SlowEntered.Task
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        // This is the regression assertion: the legacy stdio server awaited
+        // the slow frame inline and therefore could never dispatch "fast".
+        await dispatcher.FastEntered.Task
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        dispatcher.ReleaseSlow();
+
+        await runTask
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        output.Position = 0;
+        using var reader =
+            new StreamReader(
+                output,
+                Encoding.UTF8,
+                leaveOpen: true);
+
+        var ids = new HashSet<string>(
+            StringComparer.Ordinal);
+
+        while (await reader.ReadLineAsync() is { } line)
+        {
+            using var document =
+                JsonDocument.Parse(line);
+            ids.Add(
+                document.RootElement
+                    .GetProperty("id")
+                    .GetString()!);
+        }
+
+        Assert.Equal(
+            new[] { "fast", "slow" }.Order(),
+            ids.Order());
+    }
+
     private static string Request(string id, string inputJson) =>
         $"{{\"protocolVersion\":1,\"id\":\"{id}\",\"operation\":\"core.echo\",\"input\":{inputJson}}}";
 
@@ -167,7 +232,7 @@ public sealed class NdjsonServerTests
         string input,
         int? maxFrameBytes = null,
         int? chunkSize = null,
-        EchoDispatcher? dispatcher = null)
+        IOperationDispatcher? dispatcher = null)
     {
         dispatcher ??= new EchoDispatcher();
         await using var rawInput = new MemoryStream(Encoding.UTF8.GetBytes(input), writable: false);
@@ -193,6 +258,56 @@ public sealed class NdjsonServerTests
         }
 
         return results;
+    }
+
+    private sealed class BlockingDispatcher : IOperationDispatcher
+    {
+        private readonly TaskCompletionSource _slowEntered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _fastEntered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseSlow =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource SlowEntered => _slowEntered;
+        public TaskCompletionSource FastEntered => _fastEntered;
+
+        public void ReleaseSlow() =>
+            _releaseSlow.TrySetResult();
+
+        public async ValueTask<OperationResult> ExecuteAsync(
+            OperationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.Equals(
+                    request.Id,
+                    "slow",
+                    StringComparison.Ordinal))
+            {
+                _slowEntered.TrySetResult();
+                await _releaseSlow.Task
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else if (string.Equals(
+                         request.Id,
+                         "fast",
+                         StringComparison.Ordinal))
+            {
+                _fastEntered.TrySetResult();
+            }
+
+            return new OperationResult
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = request.Id,
+                Operation = request.Operation,
+                Ok = true,
+                Status = OperationStatus.Completed,
+                TargetState = TargetState.Known,
+                Result = ProtocolValue.From(request.Input)
+            };
+        }
     }
 
     private sealed class EchoDispatcher : IOperationDispatcher
