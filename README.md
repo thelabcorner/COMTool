@@ -1,14 +1,14 @@
 <div align="center">
 
-# COMTool: Guarded Adobe automation runtime for ExtendScript (ES3)
+# COMTool
 
-## One authority path for COM, ExtendScript, plug-in RPC, debugging, and agent automation
+## Guarded automation runtime for Adobe desktop applications
 
-### CLI, local IPC, NDJSON, MCP, and Node all route through one RuntimeHost → Supervisor → Worker execution kernel
+### One execution authority for COM, ExtendScript, plug-in RPC, debugging, workflows, and agent automation
 
 [![Deterministic gate](https://img.shields.io/badge/.NET-835%2F835%20passing-success)](#validation)
-[![Migration parity](https://img.shields.io/badge/V1%20parity-42%2F42-purple)](#validation)
-[![Live engine](https://img.shields.io/badge/Illustrator-30.6.0%20live-success)](#compatibility)
+[![Node SDK](https://img.shields.io/badge/Node%20SDK-20%2F20%20passing-purple)](#validation)
+[![Schema gate](https://img.shields.io/badge/schema-41%2F41%20matched-success)](#validation)
 [![Adobe: Creative Suite](https://img.shields.io/badge/Adobe%20-Creative%20Suite-red?logo=adobe&logoColor=white)](https://extendscript.docsforadobe.dev/)
 [![Engine](https://img.shields.io/badge/ExtendScript-ES3-green)](#compatibility)
 [![Package](https://img.shields.io/badge/package-win--x64%20self--contained-blue)](#installation)
@@ -114,112 +114,134 @@ Also from the same team: **[ArcFit.dev](https://arcfit.dev)**, deterministic arc
 
 ## Why COMTool?
 
-The original Python Illustrator COM tool proved the workflow, but it accumulated the exact failure modes that become dangerous once multiple agents, long-running jobs, debugger sessions, plug-in RPC, and mutation recovery share one live Adobe host: transport-specific behavior, weak process-generation identity, implicit retry assumptions, and no single durable authority for mutation state.
+Adobe desktop automation is deceptively stateful. A single operation can cross a process boundary, enter a single-threaded COM apartment, execute ExtendScript inside a UI application, call a native plug-in, and return through another transport. If the caller loses contact after dispatch, "try it again" is not a safe recovery strategy: the mutation may already have happened.
 
-**V1 is deprecated.** It remains available only as a behavioral oracle and compatibility fallback while migrations finish. New automation should use COMTool's V2 runtime surface.
+COMTool treats that entire path as one runtime problem rather than a collection of unrelated wrappers.
 
-COMTool makes the executable runtime the product. CLI, NDJSON stdio, current-user local IPC, the optional MCP adapter, and the dependency-free Node SDK all normalize into the same versioned `OperationRequest` / `OperationResult` protocol and route through one `RuntimeSupervisor`. Host execution stays in dedicated STA workers; policy, leases, durable mutation state, reconciliation, artifacts, and observability remain supervisor-owned.
+CLI, local IPC, NDJSON stdio, the optional MCP adapter, and the Node SDK all normalize into the same versioned operation protocol and route through one authoritative execution kernel:
 
-A restarted Adobe process is deliberately a new target. Gate 0A closed this live on Illustrator 30.6.0: Illustrator exited cleanly with zero documents, PID changed from **79016 → 79188**, the same already-running RuntimeHost discovered a new strong target identity, and a fresh STA .NET client reattached and executed `DoJavaScript("1+1") → 2`.
+```text
+caller / agent / CLI / Node / MCP
+              │
+              ▼
+        RuntimeHost
+              │
+              ▼
+      RuntimeSupervisor
+         │         │
+         │         └── durable state, leases,
+         │             workflows, artifacts,
+         │             reconciliation
+         ▼
+      STA Worker
+         │
+         ▼
+ Adobe host / ExtendScript / plug-in
+```
+
+The supervisor owns routing, policy, target identity, leases, durable mutation truth, reconciliation, workflows, artifacts, and observability. Host workers own Adobe execution contexts. Transports do not get to invent their own automation semantics.
+
+**COMTool 0.1.x is the first public release line of this project.** Earlier experimental tooling was private development work and is not part of COMTool's public release lineage.
 
 ---
 
 ## Features
 
-- **One execution authority.** CLI, pipe, NDJSON, MCP, and Node are transports over the same supervisor rather than parallel COM implementations.
-- **Strong target identity.** Target IDs are opaque and generation-specific; PID + process-start identity is revalidated before generation-sensitive recovery.
-- **Explicit leases.** Effectful operations require exclusive target ownership across runtime processes, backed by an OS-held per-target lock.
-- **Write-ahead mutation state.** Non-read-only dispatch is journaled before reaching the worker; completed retries replay durable results instead of re-executing.
-- **Conservative ambiguity.** A worker/runtime loss after possible dispatch becomes `reconciliation_required`; host liveness alone never clears it.
-- **Guarded recovery.** `core.target.host.terminate` is a generation-pinned break-glass path that bypasses a blocked execution lane without rediscovering or replaying the ambiguous script.
-- **Typed Illustrator operations.** Document, layer, and artboard reads/mutations own their selector grammar and target member instead of accepting arbitrary caller-provided COM paths.
-- **Generic escape hatches remain explicit.** `com.set`, `com.call`, `script.eval`, and `script.runFile` retain conservative mutation classes and lease requirements.
-- **Persistent debugger sessions.** `debug.session.*` drives the Adobe ExtendScript Debugger core through a worker-owned session bound to one target generation.
-- **Native plug-in RPC and diagnostics.** `plugin.message` and AIPDebug operations support plug-in data/control flows while preserving runtime ownership and provenance.
-- **Opaque artifacts.** Large results are materialized by the supervisor and exposed by artifact ID rather than by granting callers filesystem authority.
-- **Durable sequential workflows.** `core.workflow.*` runs 1–64 registered steps through the same dispatcher, lease, mutation ledger, and condition machinery as direct requests.
-- **Embedded COM knowledge.** Search/signature/enum lookup is generated from the pinned Illustrator COM inventory; the embedded pack records SQLite and source-JSON SHA-256 provenance.
-- **Dependency-free Node SDK.** `sdk/node` provides generic `execute()`, strong-target sessions, leases, file/eval helpers, debugger orchestration, artifact retrieval, and explicit ambiguous-recovery helpers.
-- **Caller-controlled watchdogs.** Script worker watchdogs are bounded from **100 ms through 3,600,000 ms** end-to-end.
-- **Bounded transport.** Public pipe/NDJSON and the authenticated supervisor↔worker broker retain a **1 MiB** frame ceiling.
+- **One execution authority.** CLI, pipe, NDJSON, MCP, and Node are transports over the same runtime rather than independent COM implementations.
+- **Strong target identity.** A target is tied to a specific process generation, not merely an application name or PID.
+- **Persistent STA workers.** Adobe execution stays in dedicated single-threaded apartment workers instead of borrowing arbitrary caller threads.
+- **Explicit leases.** Effectful work requires exclusive target ownership across runtime processes.
+- **Write-ahead mutation state.** Mutation intent is persisted before host dispatch.
+- **Safe replay semantics.** Completed mutations can replay their stored result; potentially executed mutations are never silently re-run.
+- **Conservative ambiguity.** A lost worker/runtime after possible dispatch becomes `reconciliation_required` rather than "probably failed."
+- **Generation-pinned recovery.** Break-glass host termination re-proves the exact known process generation before doing anything destructive.
+- **Typed Illustrator operations.** Document, artboard, and layer operations own their selector grammar and target member instead of accepting arbitrary caller paths.
+- **Guarded generic automation.** COM and ExtendScript escape hatches remain available, but keep conservative mutation classifications.
+- **Durable workflows.** Registered operations can run as recoverable multi-step jobs through the same policy and mutation machinery as direct calls.
+- **Persistent ExtendScript debugging.** Debug sessions are worker-owned and bound to one exact target generation.
+- **Native plug-in RPC and diagnostics.** Script messages and AIPDebug control remain behind the same runtime authority and provenance checks.
+- **Opaque large-result artifacts.** Large host results are verified and materialized by the supervisor without exposing arbitrary state-directory paths.
+- **Embedded Illustrator COM knowledge.** Search, signature, and enum lookup are backed by a generated, provenance-pinned knowledge pack.
+- **Dependency-free Node SDK.** Generic execution, target sessions, leases, debugger orchestration, artifact access, and explicit ambiguity recovery are available without a second Adobe implementation.
+- **Caller-controlled watchdogs.** Script worker watchdogs are bounded from **100 ms to 3,600,000 ms**.
+- **Bounded control-plane framing.** Public IPC and the authenticated worker broker retain a **1 MiB** frame ceiling.
 
 ---
 
 ## Installation
 
-COMTool ships as a self-contained Windows x64 package. It does not require a machine-wide .NET installation.
+COMTool ships as a self-contained Windows x64 package and does not require a machine-wide .NET installation.
 
-Build a production package from a clean tree:
+Build a production package from a clean source tree:
 
 ```powershell
 .\scripts\release.ps1 -Version 0.1.2
 ```
 
-The release transaction writes a versioned package and ZIP under `.artifacts/release/`, verifies the staged package, extracts and verifies the shipped ZIP, and records source commit/fingerprint, toolchain provenance, NuGet audit results, per-file SHA-256 values, and archive SHA-256 in `release-manifest.json`.
+The release transaction:
 
-Install the extracted package for the current user:
+1. validates the source tree and dependency lock state;
+2. runs deterministic .NET, schema, Node, type, and knowledge-pack gates;
+3. publishes self-contained runtime binaries;
+4. stages a complete immutable package;
+5. verifies the staged package;
+6. builds the release ZIP;
+7. extracts that ZIP into a fresh directory and verifies the shipped bytes again;
+8. records source, toolchain, NuGet-audit, file-hash, and archive-hash provenance in `release-manifest.json`.
+
+Install an extracted package for the current user:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-user.ps1
 ```
 
-Installed versions are immutable and side-by-side:
+The installer keeps immutable versions side-by-side and exposes a stable `current\` junction for integrations. Point long-lived integrations at the executables beneath that stable `current\` directory rather than at a version-specific package directory.
 
-```text
-%LOCALAPPDATA%\Programs\ComToolV2\
-  versions\<version>\
-  current\                 # stable junction to the selected version
-```
+Durable runtime state is stored separately from installed binaries and is preserved across ordinary upgrades and uninstalls. A custom `--state-dir` can isolate a development or shadow runtime; one state root has one runtime owner at a time.
 
-Configure integrations against:
-
-```text
-%LOCALAPPDATA%\Programs\ComToolV2\current\ComTool.Cli.exe
-%LOCALAPPDATA%\Programs\ComToolV2\current\ComTool.RuntimeHost.exe
-%LOCALAPPDATA%\Programs\ComToolV2\current\ComTool.Transport.Mcp.exe
-```
-
-Durable runtime state is separate at `%LOCALAPPDATA%\ComToolV2`. A custom `--state-dir` or `COMTOOL_V2_STATE_DIR` denotes the complete state root. Only one runtime process may own one state root at a time.
-
-For development, build and stage immutable binaries instead of running a persistent runtime directly from `bin/Release`:
+For development, build first and stage an immutable runtime copy:
 
 ```powershell
 .\scripts\stage-runtime-dev.ps1
 ```
 
-Windows can lock loaded assemblies; immutable staging prevents the live development runtime from obstructing subsequent builds.
+Do not run a persistent development runtime directly from `bin/Release`. Windows can lock loaded assemblies and obstruct later builds.
 
 ---
 
 ## Quick Start
 
-With an installed runtime:
+From an installed `current\` directory or an extracted verified package:
 
 ```powershell
-$ct = "$env:LOCALAPPDATA\Programs\ComToolV2\current"
+.\ComTool.RuntimeHost.exe
+```
 
-Start-Process "$ct\ComTool.RuntimeHost.exe"
+In another shell:
 
-& "$ct\ComTool.Cli.exe" health
-& "$ct\ComTool.Cli.exe" targets
+```powershell
+.\ComTool.Cli.exe health
+.\ComTool.Cli.exe targets
 ```
 
 Read Illustrator state:
 
 ```powershell
-& "$ct\ComTool.Cli.exe" status
-& "$ct\ComTool.Cli.exe" get --path ActiveDocument.Name
+.\ComTool.Cli.exe status
+.\ComTool.Cli.exe get --path ActiveDocument.Name
 ```
 
-Effectful work requires a target lease and a caller-stable request ID. The runtime owns the safety classification; a caller cannot downgrade a fixed mutation operation to read-only.
+The runtime's machine-readable operation catalog is authoritative. Programmatic clients can query `core.operations.list` and `core.operation.describe` rather than hard-coding assumptions about the available surface.
 
-The optional MCP entry point remains a thin adapter:
+Effectful work requires the runtime's mutation policy to be satisfied. Fixed mutation operations cannot be weakened by caller input, and arbitrary script execution cannot declare itself read-only.
+
+The optional MCP entry point remains a thin transport adapter:
 
 ```powershell
-& "$ct\ComTool.Transport.Mcp.exe" --self-test --pipe <name>
+.\ComTool.Transport.Mcp.exe --self-test --pipe <name>
 ```
 
-For Node programs, see [`sdk/node/README.md`](sdk/node/README.md). The SDK forwards arbitrary current/future operations through `ComTool.Cli.exe stdio`; it does not contain a second Adobe/COM implementation.
+For programmatic Node usage, see [`sdk/node/README.md`](sdk/node/README.md). The SDK forwards ordinary runtime operations; it contains no independent Adobe/COM implementation.
 
 ---
 
@@ -227,7 +249,7 @@ For Node programs, see [`sdk/node/README.md`](sdk/node/README.md). The SDK forwa
 
 ### Transports
 
-| Surface | Entry point | Authority |
+| Surface | Entry point | Execution authority |
 |---|---|---|
 | CLI | `ComTool.Cli.exe <command>` | RuntimeHost → RuntimeSupervisor |
 | Local IPC | `ComTool.RuntimeHost.exe` current-user named pipe | RuntimeSupervisor |
@@ -235,9 +257,11 @@ For Node programs, see [`sdk/node/README.md`](sdk/node/README.md). The SDK forwa
 | MCP | `ComTool.Transport.Mcp.exe --server` | Thin adapter over the runtime pipe |
 | Node | `sdk/node` | Thin client over CLI NDJSON |
 
-NDJSON is correlation-based, not response-order-based. `NdjsonServer` admits **32** concurrent requests by default and serializes stdout writes only. The CLI proxy pools runtime-pipe clients so an explicit recovery/control request is not queued behind a blocked execution request.
+NDJSON is correlation-based rather than response-order-based. The server admits **32 concurrent requests by default** and serializes stdout writes only. Overlapping CLI stdio requests can use independent pooled runtime-pipe connections, so a recovery/control request does not have to wait behind an execution request that is blocked in Adobe.
 
 ### Runtime and control
+
+Core runtime operations include:
 
 - `core.runtime.health`
 - `core.operations.list`
@@ -245,12 +269,6 @@ NDJSON is correlation-based, not response-order-based. `NdjsonServer` admits **3
 - `core.operation.examples`
 - `core.artifact.describe`
 - `core.artifact.read`
-- `knowledge.describe`
-- `knowledge.search`
-- `knowledge.symbol`
-- `knowledge.enum`
-- `script.validate`
-- `watch.condition`
 - `core.incidents.list`
 - `core.incident.resolve`
 - `core.targets.list`
@@ -267,6 +285,17 @@ NDJSON is correlation-based, not response-order-based. `NdjsonServer` admits **3
 - `core.workflow.cancel`
 - `core.workflow.resume`
 
+Introspection and planning operations include:
+
+- `knowledge.describe`
+- `knowledge.search`
+- `knowledge.symbol`
+- `knowledge.enum`
+- `script.validate`
+- `watch.condition`
+
+The live operation catalog is authoritative. Call `core.operations.list` / `core.operation.describe` when exact policy or capability metadata matters.
+
 ### Illustrator reads
 
 - `com.get`
@@ -275,16 +304,18 @@ NDJSON is correlation-based, not response-order-based. `NdjsonServer` admits **3
 - `illustrator.artboard.read`
 - `illustrator.layer.read`
 
+Read operations are target-scoped but do not require a mutation lease.
+
 ### Guarded scripts
 
 - `script.eval`
 - `script.runFile`
 
-`script.runFile` requires an absolute `.jsx` / `.jsxbin` path plus the caller's SHA-256 of the exact file bytes. The adapter re-hashes the file immediately before execution.
+`script.runFile` requires an absolute `.jsx` or `.jsxbin` path plus the caller's SHA-256 of the exact file bytes. The host adapter verifies those bytes again immediately before execution.
 
-Arbitrary script execution cannot self-certify as read-only. Omitted effects default to `unknown`; effectful scripts require an exclusive target lease and caller-stable request ID.
+Arbitrary source execution may declare a write class, but it cannot self-certify as read-only. Omitted effects default to `unknown`.
 
-### Typed mutations and lifecycle
+### Typed mutations and document lifecycle
 
 - `illustrator.artboard.setName`
 - `illustrator.artboard.setRect`
@@ -300,17 +331,17 @@ Arbitrary script execution cannot self-certify as read-only. Omitted effects def
 - `illustrator.document.saveAs`
 - `illustrator.document.close`
 
-Typed layer/artboard operations require explicit selectors, reject ambiguous name matches before mutation, and never accept a caller-supplied COM member/path.
+Typed layer/artboard operations require explicit selectors, reject ambiguous name matches before mutation, and never accept a caller-supplied COM member path.
 
-`illustrator.document.close` requires one explicit close policy: `save`, `discard`, or `reject_if_unsaved`. Discard is never the default.
+Document close requires an explicit policy: `save`, `discard`, or `reject_if_unsaved`. Destructive discard is never implied.
 
 ### Native plug-ins
 
-- `plugin.message` — bounded `Application.SendScriptMessage(plugin, selector, input)` data RPC.
-- `plugin.debug.diagnostics` — fixed AIPDebug discover/info/logs/snapshot/stats surface.
+- `plugin.message` — bounded `Application.SendScriptMessage(plugin, selector, input)` RPC.
+- `plugin.debug.diagnostics` — fixed AIPDebug discovery/info/log/snapshot/statistics surface.
 - `plugin.debug.control` — bounded AIPDebug control actions.
 
-The packaged `aipdebugctl.exe` is re-hashed against `release-manifest.json` before use. Direct VectorIPC diagnostics are allowed only after endpoint provenance is established through the exact Illustrator generation, and the native peer verifies expected PID + process-start identity again.
+The packaged native diagnostic helper is hash-checked against `release-manifest.json` before use. Direct VectorIPC diagnostics are allowed only after endpoint provenance is established through the exact Illustrator generation; the native peer then verifies the expected PID and process-start generation again.
 
 ### ExtendScript debugger
 
@@ -319,11 +350,13 @@ The packaged `aipdebugctl.exe` is re-hashed against `release-manifest.json` befo
 - `debug.session.command`
 - `debug.session.close`
 
-The debugger session is worker-owned and generation-scoped. Commands cover eval, breakpoint management, break/frame/property inspection, continue/halt/break, and step over/into/out. The worker pins the exact debugger-addon bytes before the bridge child exists and the bridge re-hashes that path immediately before loading it.
+A debugger session is worker-owned and target-generation-scoped. Commands cover evaluation, breakpoint management, break/frame/property inspection, continue, halt, break, and step over/into/out.
+
+The worker pins the debugger add-on bytes before creating the bridge child, and the bridge re-hashes that path immediately before loading it.
 
 ### Mutation crash model
 
-For non-read-only operations, the durable state machine is:
+For non-read-only operations, durable execution state is:
 
 ```text
 prepared → completed
@@ -333,29 +366,30 @@ prepared → completed
 
 The request ID is the idempotency key.
 
-- `completed`: an identical retry returns the stored result with `mutation.replay` evidence and `executeMs = 0`.
-- `not_started`: the same request may safely retry.
-- `prepared` after runtime loss, or `ambiguous`: the target rehydrates as `reconciliation_required`; the mutation is not replayed.
-- same request ID + different semantic payload: rejected.
-- generic host liveness is not proof of mutation outcome.
+- **completed** — an identical retry returns the stored result with replay evidence and does not execute the host operation again.
+- **not_started** — the request may be safely retried.
+- **prepared after runtime loss / ambiguous** — the target enters `reconciliation_required`; COMTool does not guess and does not replay the operation.
+- **same request ID, different semantic payload** — rejected.
 
-`core.target.mutation.reconcile` can clear an incident only from the exact postcondition fingerprint durably declared with the original request. Conditions invented after ambiguity cannot certify the old mutation.
+Host liveness is not mutation-outcome evidence.
+
+`core.target.mutation.reconcile` can clear an incident only from verified postconditions whose canonical fingerprint matches the conditions durably declared with the original mutation request. New evidence cannot be invented after ambiguity and used to retroactively certify an unknown operation.
 
 ### Durable workflows
 
-`core.workflow.submit` accepts **1–64** registered sequential steps. Each step has an explicit ID, operation, input, and optional pre/postconditions. The outer request ID is the job ID and definition idempotency key.
+`core.workflow.submit` accepts **1–64 registered sequential steps**. Each step has an explicit step ID, operation, input, and optional preconditions/postconditions. The outer request ID is the durable job ID and definition idempotency key.
 
-Step request IDs are deterministically derived from job + step identity, so runtime recovery reuses the same mutation-ledger semantics. Mutating workflows hold one target lease for the run. `targetLease:false` is accepted only when every step is read-only. An ambiguous/reconciliation-required step always halts the workflow.
+Step request IDs are deterministically derived from job + step identity, so restart recovery reuses the same mutation-ledger semantics. Mutating workflows hold one target lease for the run. `targetLease:false` is accepted only when every step is read-only. Any ambiguous or reconciliation-required step halts the workflow.
 
-One strong Illustrator target remains a capacity-1 execution resource. Future DAG scheduling may overlap runtime-only work or genuinely different targets, but not parallel host dispatch against one Illustrator generation. See [`docs/WORKFLOW_CONCURRENCY_MODEL.md`](docs/WORKFLOW_CONCURRENCY_MODEL.md).
+One Illustrator target is intentionally a capacity-1 Adobe execution resource. Future scheduling may overlap runtime-only work or independent target generations, but it must not turn logical workflow parallelism into unsafe concurrent host execution against one Illustrator process. See [`docs/WORKFLOW_CONCURRENCY_MODEL.md`](docs/WORKFLOW_CONCURRENCY_MODEL.md).
 
 ### Opaque artifacts and large results
 
 Public pipe/NDJSON and the authenticated runtime↔worker broker retain a **1 MiB** frame ceiling.
 
-Successful host result payloads at or above **32 KiB** are streamed by the worker as correlated **512 KiB** raw chunks. The supervisor verifies chunk order, byte count, result kind, and SHA-256, reconstructs the canonical result, finalizes durable mutation truth when required, then commits the payload through the artifact store and returns a small opaque envelope.
+Successful host result payloads at or above **32 KiB** are streamed as correlated **512 KiB raw chunks**. The supervisor validates sequence, byte count, result kind, and SHA-256, reconstructs the canonical result, finalizes durable mutation truth when required, commits the payload through the artifact store, and returns a small opaque descriptor.
 
-A payload beyond the **64 MiB** artifact ceiling fails explicitly with completed execution truth rather than truncation or replay.
+A result beyond the **64 MiB** artifact ceiling fails explicitly rather than being truncated or silently replayed.
 
 ---
 
@@ -363,54 +397,64 @@ A payload beyond the **64 MiB** artifact ceiling fails explicitly with completed
 
 | Check | Command | Result |
 |---|---|---|
-| .NET deterministic gate | `.\scripts\dotnet.ps1 test ComTool.V2.slnx -c Release --no-build` | **835/835 passing**, 0 failed |
-| V1 migration/parity slice | included in .NET gate | **42/42 passing** |
+| Deterministic .NET gate | release/test pipeline | **835/835 passing**, 0 failed |
 | Node SDK | `node --test sdk/node/test/sdk.test.mjs` | **20/20 passing** |
 | Protocol/schema fixtures | release schema gate | **41/41 matched** |
 | TypeScript SDK surface | `node sdk/node/test/typecheck.mjs` | TypeScript **5.9.3** check passed |
 | Embedded COM knowledge | `node scripts/build-knowledge-pack.mjs --check` | byte-current against pinned SQLite/manifest provenance |
-| Package verification | `scripts/release.ps1` | staged package + extracted shipped ZIP passed |
-| Clean-machine shell path | release package smoke | Windows PowerShell **5.1.22621.6133** passed |
+| Package verification | `.\scripts\release.ps1 -Version <semver>` | staged package and extracted shipped ZIP verified |
+| Windows PowerShell package smoke | release verification | **5.1.22621.6133** passed |
 | NuGet audit | release transaction | **0 vulnerability records** |
 
-The .NET total covers protocol, runtime/catalog policy, supervisor and durable reconciliation, host launch/attach/recovery, Illustrator adapters, debugger, VectorIPC integration, generic COM, typed mutation semantics, embedded knowledge, runtime IPC, pipe, stdio, MCP, and migration/parity.
+The deterministic .NET gate covers protocol contracts, operation-catalog policy, durable mutation/reconciliation behavior, target leasing, runtime IPC, pipe and NDJSON transport, MCP bridging, host launch/attach/recovery, Illustrator COM reads and mutations, document lifecycle, debugger integration, native plug-in diagnostics, artifact handling, knowledge lookup, workflows, and compatibility regression fixtures.
 
-Live Illustrator evidence additionally covers STA worker ownership, persistent worker reuse, typed COM reads, snapshot parity, ESON-backed scalar/array/object result fidelity, structured ESON arguments, hard runtime/worker crash replay with **zero target-worker re-execution**, cross-runtime lease contention, immediate kernel-lock takeover after owner death, structure reads on a disposable document, debugger sessions, and restart/reconnect generation change.
+Live Illustrator 30.6.0 evidence covers:
 
-Captured results live under [`evidence/`](evidence/).
+- STA worker ownership and persistent worker reuse;
+- typed COM reads and target snapshots;
+- ESON-backed string, number, boolean, null, array, and object fidelity;
+- structured argument transport;
+- durable completed-result replay across a hard runtime/worker crash with **zero target-worker re-execution**;
+- cross-runtime lease contention and immediate kernel-lock takeover after owner death;
+- typed structure reads against a disposable document;
+- persistent ExtendScript debugger operation;
+- native plug-in diagnostics;
+- host restart/reconnect where the process generation changed and the already-running RuntimeHost discovered the replacement target.
+
+Captured proof lives under [`evidence/`](evidence/).
 
 ---
 
 ## Performance
 
-The measured live Illustrator 30.6.0 session recorded warm small-expression execution around **0.9–1.1 ms** inside Illustrator.
+The measured live Illustrator 30.6.0 session recorded warm small-expression execution around **0.9–1.1 ms inside Illustrator**.
 
-COMTool deliberately optimizes control-plane liveness rather than pretending Illustrator itself can execute host work in parallel. NDJSON admits bounded concurrent requests, but same-target Adobe execution is serialized; overlapping runtime-only/control work can use separate pooled pipe connections so recovery is not trapped behind a wedged script request.
+COMTool optimizes for control-plane liveness and correctness rather than pretending a single Illustrator process can safely perform arbitrary host mutations in parallel. Same-target Adobe execution remains serialized, while runtime-only work and independent pipe connections can overlap so recovery/control traffic is not trapped behind a blocked execution call.
 
-The artifact path avoids forcing large results through the 1 MiB public/broker frame ceiling: results at the 32 KiB threshold are chunk-streamed to the supervisor and exposed by opaque artifact ID.
+Large-result offload keeps the control plane bounded: payloads crossing the 32 KiB artifact threshold are streamed to the supervisor rather than inflating the 1 MiB control frame.
 
-These measurements are evidence for the recorded environment, not cross-host performance promises.
+These numbers describe the recorded validation environment; they are not cross-machine or cross-host performance guarantees.
 
 ---
 
 ## Security Model
 
-The public persistent runtime named pipe uses Windows `CurrentUserOnly`. The current Windows user is therefore the local public trust boundary; COMTool does not claim a credential boundary against arbitrary processes already running as that same user.
+The persistent public runtime pipe uses Windows `CurrentUserOnly`. The current Windows user is therefore the local public trust boundary. COMTool does not claim to isolate one same-user process from another same-user process that already has equivalent local authority.
 
-The private supervisor→worker pipe adds a separate ephemeral bootstrap token plus verified child PID/process-start identity.
+The private supervisor→worker channel adds a separate ephemeral bootstrap token plus verified child PID/process-start identity.
 
-Mutation safety is independent of transport:
+Mutation safety is transport-independent:
 
 - effectful operations use explicit target leases;
-- mutation intent is durably prepared before dispatch;
-- completed retries replay state rather than re-executing;
+- mutation intent is durably prepared before host dispatch;
+- completed retries replay stored truth instead of re-executing;
 - possible-dispatch failures remain ambiguous;
-- host heartbeat is insufficient reconciliation evidence;
-- break-glass host termination requires the already-known exact PID + process-start generation;
-- caller-supplied endpoints cannot replace worker-owned plug-in provenance;
-- packaged native/debugger helpers are hash-verified before load/use.
+- a heartbeat cannot certify mutation outcome;
+- break-glass host termination requires the already-known exact process generation;
+- caller-supplied endpoints cannot replace worker-established plug-in provenance;
+- packaged native/debugger helpers are hash-verified before load or use.
 
-Install and release packages are content-addressed by a schema-versioned manifest and archive SHA-256. Authenticode signing is supported but optional. An unsigned archive detects corruption/inconsistency; it does not authenticate the publisher, so distribution of unsigned packages still requires a trusted channel.
+Release packages are content-addressed by a schema-versioned manifest and archive SHA-256. Authenticode signing is supported but optional. Checksums and manifests establish integrity; an unsigned archive does not establish publisher identity, so unsigned distribution still requires a trusted channel.
 
 ---
 
@@ -418,61 +462,62 @@ Install and release packages are content-addressed by a schema-versioned manifes
 
 | Target | Status |
 |---|---|
-| Windows x86-64 | Primary supported runtime/package target |
-| Adobe Illustrator 2026 / 30.6.0 | Full reference adapter; deterministic + live conformance evidence |
-| ExtendScript / ES3 | Script execution, ES3 preflight, ESON transport, debugger evidence |
-| Photoshop 2026 | Gate 0F proved second-host COM/script viability and prevented Illustrator-only core assumptions |
-| Other Adobe desktop hosts | Require a truthful capability-driven adapter; not advertised as Illustrator-equivalent |
-| .NET runtime | Self-contained release package; no machine-wide .NET install required |
-| Node.js | Dependency-free SDK client; Node does not implement Adobe/COM behavior |
+| Windows x86-64 | Primary supported runtime and package target |
+| Adobe Illustrator 2026 / 30.6.0 | Complete reference adapter with deterministic and live conformance evidence |
+| ExtendScript / ES3 | Script execution, static preflight, ESON transport, and debugger evidence |
+| Photoshop 2026 | Second-host COM/script viability verified; not a complete Illustrator-equivalent adapter |
+| Other Adobe desktop hosts | Capability-driven adapter required; unsupported capabilities are not advertised |
+| .NET | Self-contained production package; no machine-wide .NET runtime required |
+| Node.js | Dependency-free client/orchestration SDK; no independent Adobe implementation |
 
-Illustrator is the complete production adapter today. Other hosts integrate by capability rather than being forced into an Illustrator-shaped API.
+Illustrator is the complete production host adapter today. The runtime architecture is intentionally host-capability-driven so additional Adobe applications can integrate without being forced into Illustrator-specific semantics.
 
 ---
 
 ## Engine quirks that shaped the design
 
-### STA and UI ownership are real constraints
+### Adobe execution is STA and UI-bound
 
-Illustrator automation is STA/UI-bound. COMTool therefore keeps Adobe execution inside dedicated workers and treats one strong target generation as a capacity-1 host-execution resource.
+A single Illustrator target cannot be treated like an ordinary parallel server. COMTool keeps Adobe execution in dedicated STA workers and treats one strong target generation as a capacity-1 host-execution resource.
 
-### Host health and script-engine health are different
+### Host health and script-engine health are different signals
 
-Gate 0A observed `RPC_E_SERVERFAULT` (`0x80010105`) from `DoJavaScript` while ordinary COM status reads remained healthy. The legacy Python tool observed the same transient condition. The runtime therefore does not equate host heartbeat with script-engine health and does not blindly replay a mutation after a script-route fault.
+Live testing observed `RPC_E_SERVERFAULT` (`0x80010105`) from `DoJavaScript` while ordinary COM status reads still succeeded. Independent development probes reproduced the condition. COMTool therefore does not interpret a healthy COM heartbeat as proof that the script route is healthy, and it does not automatically replay a mutation after a script-route fault.
 
-### Process identity is not PID alone
+### PID alone is not an identity
 
-A restarted application can reuse names and eventually PIDs. Target identity includes process-start generation evidence, and a restarted Illustrator is always a new target.
+Applications restart. PIDs can eventually be reused. A COMTool target carries process-generation evidence, and a restarted Adobe process is always treated as a new target.
 
-### A timeout after submission is not cancellation
+### Caller timeout is not host cancellation
 
-Node `responseTimeoutMs` or `AbortSignal` can stop the caller waiting locally. After submission, that is conservatively ambiguous; it does not cancel or replay Adobe work. Owned leases are retained for explicit recovery.
+A Node `responseTimeoutMs` or `AbortSignal` can stop the caller from waiting. Once an operation has been submitted, local cancellation does not prove the host stopped. The result is therefore treated conservatively and any owned recovery authority is retained.
 
-### "Process gone" and "identity unreadable" are different
+### "Gone" and "unreadable" are different
 
-Break-glass termination fails closed if exact process generation cannot be re-proven. An unreadable identity is not silently converted into evidence that the process exited.
+Destructive recovery fails closed if the exact process generation cannot be re-proven. Failure to read identity is not silently converted into evidence that the old process exited.
 
-### Large results need a separate data plane
+### Control traffic and result payloads need different bounds
 
-A fixed 1 MiB control frame is kept small enough to bound transport behavior. Large successful host results are chunked, verified, and materialized as opaque artifacts instead of expanding the control-plane authority to arbitrary filesystem paths.
+A fixed 1 MiB control frame keeps transport behavior bounded. Large successful results move through the verified artifact path rather than expanding the command surface into arbitrary filesystem access.
 
 ---
 
 ## Development
 
-A project-local .NET **10.0.401 x64** SDK is bootstrapped into `.dotnet/`; global PATH and the Windows registry are not modified.
+A project-local .NET **10.0.401 x64** SDK is bootstrapped into `.dotnet/`; it does not alter global PATH or the Windows registry.
 
-Inspect the toolchain:
+Inspect the pinned toolchain:
 
 ```powershell
 .\scripts\dotnet.ps1 --info
 ```
 
-Build and run the deterministic gate:
+Build and test the repository without depending on a product-generation filename:
 
 ```powershell
-.\scripts\dotnet.ps1 build ComTool.V2.slnx -c Release
-.\scripts\dotnet.ps1 test  ComTool.V2.slnx -c Release --no-build
+$sln = (Get-ChildItem -File *.slnx | Select-Object -First 1).FullName
+.\scripts\dotnet.ps1 build $sln -c Release
+.\scripts\dotnet.ps1 test  $sln -c Release --no-build
 ```
 
 Verify the embedded COM knowledge pack:
@@ -481,7 +526,7 @@ Verify the embedded COM knowledge pack:
 node scripts/build-knowledge-pack.mjs --check
 ```
 
-Run the Node SDK gate:
+Run the Node SDK gates:
 
 ```powershell
 node --test sdk/node/test/sdk.test.mjs
@@ -494,13 +539,13 @@ Stage an immutable development runtime:
 .\scripts\stage-runtime-dev.ps1
 ```
 
-Build a release from a clean source tree:
+Build a production release:
 
 ```powershell
 .\scripts\release.ps1 -Version <semver>
 ```
 
-Production packaging refuses a dirty/untracked source tree by default. `-AllowDirty` exists for development validation and marks the manifest accordingly; production releases cannot use `-SkipTests`.
+Production packaging refuses dirty or untracked source by default. Development validation can explicitly permit a dirty tree, and the resulting manifest records that provenance. Production release transactions cannot skip the deterministic test gate.
 
 ---
 
@@ -509,36 +554,37 @@ Production packaging refuses a dirty/untracked source tree by default. `-AllowDi
 | Path | Purpose |
 |---|---|
 | `src/ComTool.Protocol/` | Versioned request/result/value contracts |
-| `src/ComTool.Runtime/` | Operation catalog, examples, artifacts, runtime-owned semantics |
+| `src/ComTool.Runtime/` | Operation catalog, examples, artifacts, and runtime-owned semantics |
 | `src/ComTool.RuntimeHost/` | Persistent RuntimeHost entry point |
-| `src/ComTool.Supervisor/` | Routing, leases, mutation state, workflows, host lifecycle/recovery |
+| `src/ComTool.Supervisor/` | Routing, leases, mutation state, workflows, host lifecycle, and recovery |
 | `src/ComTool.Worker/` | Dedicated host worker process |
-| `src/ComTool.Hosts.Abstractions/` | Host capability and launch/attach contracts |
-| `src/ComTool.Hosts.Illustrator/` | Illustrator COM/script/debugger/plug-in adapter |
+| `src/ComTool.Hosts.Abstractions/` | Host capability, launch, attach, and session contracts |
+| `src/ComTool.Hosts.Illustrator/` | Illustrator COM, script, debugger, and plug-in adapter |
 | `src/ComTool.Knowledge/` | Embedded Illustrator COM knowledge pack and query service |
-| `src/ComTool.Transport.*` | Pipe, stdio, and MCP framings/adapters |
+| `src/ComTool.Transport.*` | Pipe, stdio, and MCP transport adapters |
 | `src/ComTool.Cli/` | Thin command-line client over RuntimeHost |
-| `sdk/node/` | Dependency-free Node client/orchestration layer |
-| `schemas/` | Protocol JSON schemas |
-| `protocol/operation-registry.json` | Checked-in runtime catalog snapshot |
-| `migration/` | V1 feature/parity model and fixtures |
-| `tests/` | Deterministic .NET transport/runtime/host/parity suites |
-| `spikes/` | Phase-0 executable architecture probes |
-| `evidence/` | Captured live/release evidence |
-| `scripts/` | Toolchain bootstrap, staging, knowledge generation, packaging, install verification |
+| `sdk/node/` | Dependency-free Node client and orchestration layer |
+| `schemas/` | JSON Schema contracts |
+| `protocol/operation-registry.json` | Checked-in runtime operation-catalog snapshot |
+| `migration/` | Historical compatibility and semantic-regression fixtures |
+| `tests/` | Deterministic protocol, runtime, host, transport, and compatibility suites |
+| `spikes/` | Executable architecture and host-behavior probes |
+| `evidence/` | Captured live and release evidence |
+| `scripts/` | Toolchain bootstrap, staging, knowledge generation, packaging, and install verification |
 
-Architectural decisions live under [`docs/`](docs/). `PHASE0_STATUS.md` is the executable gate ledger.
+Architectural decisions and operational contracts live under [`docs/`](docs/). `PHASE0_STATUS.md` is the executable architecture-gate ledger retained from development.
 
 ---
 
 ## Known limitations
 
-- Illustrator 30.6.0 is the complete live-conformance host today; Photoshop 2026 has second-host viability evidence, not full Illustrator-equivalent coverage.
-- Same-target host execution is intentionally serialized. A workflow DAG cannot make Illustrator safely execute two independent mutations at once.
-- Arbitrary script/COM escape hatches cannot be given the same narrow semantic guarantees as runtime-owned typed operations.
-- Typed layer/artboard mutations have deterministic adapter coverage. Live mutation conformance must continue to use disposable documents with exact identity/postcondition verification rather than user artwork.
-- Authenticode is optional. Unsigned release manifests/checksums provide integrity, not publisher authentication.
-- The legacy Python V1 tool is deprecated but intentionally retained as a differential oracle during migration; removing it is a separate compatibility decision.
+- Illustrator 30.6.0 is the only complete live-conformance host adapter today.
+- Photoshop 2026 has second-host viability evidence, not full feature parity with the Illustrator adapter.
+- Same-target Adobe execution is intentionally serialized.
+- Generic script and COM escape hatches cannot provide the same narrow semantic guarantees as runtime-owned typed operations.
+- Typed layer/artboard mutations have deterministic adapter coverage; live mutation conformance should continue to use disposable documents with exact identity and postcondition verification rather than user artwork.
+- Authenticode signing is optional. Unsigned manifests and hashes establish package integrity, not publisher authentication.
+- Some internal source filenames and compatibility fixtures preserve development-history naming. They are implementation details, not separate public release lines.
 
 ---
 
@@ -546,7 +592,7 @@ Architectural decisions live under [`docs/`](docs/). `PHASE0_STATUS.md` is the e
 
 COMTool builds on Adobe's COM/OLE and ExtendScript host surfaces, the community-maintained [docsforadobe ExtendScript documentation](https://extendscript.docsforadobe.dev/), the sibling [ESON](https://github.com/thelabcorner/eson) structured-data runtime, and [VectorIPC](https://github.com/thelabcorner/vector-ipc) for bounded native plug-in IPC.
 
-Historical V1 behavior remains valuable as a differential oracle; V2's migration/parity suite keeps that evidence explicit rather than silently reinterpreting it.
+The project also benefits from extensive differential and failure-mode testing performed during private development before the first public release.
 
 ---
 
