@@ -70,8 +70,10 @@ export class ComToolClient extends EventEmitter {
   #env;
   #spawn;
   #maxResponseBytes;
+  #selfHeal;
   #child = null;
   #startPromise = null;
+  #healingPromise = null;
   #closing = false;
   #faulted = false;
   #pending = new Map();
@@ -87,6 +89,7 @@ export class ComToolClient extends EventEmitter {
     env = process.env,
     spawnImpl = nodeSpawn,
     maxResponseBytes = DEFAULT_MAX_RESPONSE_BYTES,
+    selfHeal = true,
     transportCommand
   } = {}) {
     super();
@@ -94,11 +97,15 @@ export class ComToolClient extends EventEmitter {
     if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1024) {
       throw new TypeError('maxResponseBytes must be an integer >= 1024.');
     }
+    if (typeof selfHeal !== 'boolean') {
+      throw new TypeError('selfHeal must be a boolean.');
+    }
 
     this.#cwd = cwd;
     this.#env = env;
     this.#spawn = spawnImpl;
     this.#maxResponseBytes = maxResponseBytes;
+    this.#selfHeal = selfHeal;
 
     if (transportCommand !== undefined) {
       if (
@@ -120,6 +127,9 @@ export class ComToolClient extends EventEmitter {
       this.#args = ['stdio'];
       if (pipeName) {
         this.#args.push('--pipe', String(pipeName));
+      }
+      if (!selfHeal) {
+        this.#args.push('--no-self-heal');
       }
     }
   }
@@ -166,10 +176,15 @@ export class ComToolClient extends EventEmitter {
 
       this.#child = child;
 
-      child.stdout.on('data', chunk => this.#onStdout(chunk));
-      child.stderr.on('data', chunk => this.#onStderr(chunk));
-      child.on('exit', (code, signal) => this.#onExit(code, signal));
-      child.on('error', error => this.#onChildError(error));
+      child.stdout.on('data', chunk => {
+        if (child === this.#child) this.#onStdout(chunk);
+      });
+      child.stderr.on('data', chunk => {
+        if (child === this.#child) this.#onStderr(chunk);
+      });
+      child.on('exit', (code, signal) =>
+        this.#onExit(child, code, signal));
+      child.on('error', error => this.#onChildError(child, error));
 
       child.once('spawn', () => {
         this.#emitEvent('transport.started', {
@@ -269,15 +284,7 @@ export class ComToolClient extends EventEmitter {
       );
     }
 
-    await this.start();
-
-    if (this.#faulted || !this.#child?.stdin?.writable) {
-      throw new ComToolTransportError(
-        'transport_unavailable',
-        'COM Tool stdio transport is not writable.',
-        { classification: 'transport_not_sent', submitted: false }
-      );
-    }
+    await this.#ensureTransportAvailable(request);
 
     if (this.#pending.has(request.id)) {
       throw new Error(
@@ -417,7 +424,128 @@ export class ComToolClient extends EventEmitter {
     });
   }
 
-  async close({ killAfterMs = 2000 } = {}) {
+  async #ensureTransportAvailable(request) {
+    if (this.#faulted || (this.#child && !this.#child.stdin?.writable)) {
+      if (!this.#selfHeal) {
+        throw this.#transportUnavailable(request);
+      }
+      await this.#healTransport('faulted_or_unwritable');
+    }
+
+    await this.start();
+
+    if (this.#faulted || !this.#child?.stdin?.writable) {
+      if (!this.#selfHeal) {
+        throw this.#transportUnavailable(request);
+      }
+
+      // One bounded repair attempt for this not-yet-submitted request. If the
+      // replacement also dies immediately, surface a normal transport-not-sent
+      // error rather than looping or changing request identity.
+      await this.#healTransport('unavailable_after_start');
+    }
+
+    if (this.#faulted || !this.#child?.stdin?.writable) {
+      throw this.#transportUnavailable(request);
+    }
+  }
+
+  async #healTransport(reason) {
+    if (this.#healingPromise) {
+      return this.#healingPromise;
+    }
+    if (this.#pending.size !== 0) {
+      throw new ComToolTransportError(
+        'transport_self_heal_blocked',
+        'COM Tool transport cannot self-heal while requests are still in flight.',
+        {
+          classification: 'transport_not_sent',
+          submitted: false,
+          details: { pending: this.#pending.size, reason }
+        }
+      );
+    }
+
+    const previous = this.#child;
+    this.#healingPromise = (async () => {
+      this.#emitEvent('transport.self_heal.started', {
+        reason,
+        previousPid: previous?.pid ?? null
+      });
+
+      if (
+        previous &&
+        previous.exitCode === null &&
+        previous.signalCode === null
+      ) {
+        try {
+          previous.kill();
+        } catch {
+          // Best effort. Stale-child callbacks are identity-filtered below.
+        }
+      }
+
+      if (this.#child === previous) {
+        this.#child = null;
+      }
+      this.#startPromise = null;
+      this.#faulted = false;
+      this.#stdoutDecoder = new StringDecoder('utf8');
+      this.#stderrDecoder = new StringDecoder('utf8');
+      this.#stdoutBuffer = '';
+      this.#stderrBuffer = '';
+
+      try {
+        await this.start();
+        if (this.#faulted || !this.#child?.stdin?.writable) {
+          throw new ComToolTransportError(
+            'transport_self_heal_failed',
+            'COM Tool replacement stdio transport is not writable.',
+            {
+              classification: 'transport_not_started',
+              submitted: false,
+              details: { reason }
+            }
+          );
+        }
+
+        this.#emitEvent('transport.self_heal.completed', {
+          reason,
+          pid: this.#child?.pid ?? null
+        });
+      } catch (error) {
+        this.#emitEvent('transport.self_heal.failed', {
+          reason,
+          message: error?.message ?? String(error)
+        });
+        throw error;
+      } finally {
+        this.#healingPromise = null;
+      }
+    })();
+
+    return this.#healingPromise;
+  }
+
+  #transportUnavailable(request) {
+    return new ComToolTransportError(
+      'transport_unavailable',
+      this.#selfHeal
+        ? 'COM Tool stdio transport is not writable after self-healing.'
+        : 'COM Tool stdio transport is not writable and self-healing is disabled.',
+      {
+        classification: 'transport_not_sent',
+        submitted: false,
+        requestId: request?.id ?? null,
+        operation: request?.operation ?? null
+      }
+    );
+  }
+
+  async close({
+    killAfterMs = 2000,
+    forceKillWaitMs = 2000
+  } = {}) {
     if (this.#closing) return;
     this.#closing = true;
 
@@ -434,21 +562,38 @@ export class ComToolClient extends EventEmitter {
 
     await new Promise(resolveClose => {
       let done = false;
+      let forceWaitTimer = null;
+
       const finish = () => {
         if (done) return;
         done = true;
-        clearTimeout(timer);
+        clearTimeout(graceTimer);
+        if (forceWaitTimer) clearTimeout(forceWaitTimer);
         resolveClose();
       };
-      const timer = setTimeout(() => {
+
+      const graceTimer = setTimeout(() => {
         try {
           child.kill();
         } catch {
           // Best effort process teardown only.
         }
-        finish();
+
+        // Do not report "closed" merely because termination was requested.
+        // Wait for the owned transport process to actually exit, bounded so a
+        // broken child cannot hang caller shutdown forever.
+        forceWaitTimer = setTimeout(() => {
+          try {
+            child.kill();
+          } catch {
+            // Final best-effort termination only.
+          }
+          finish();
+        }, forceKillWaitMs);
+        forceWaitTimer.unref?.();
       }, killAfterMs);
-      timer.unref?.();
+
+      graceTimer.unref?.();
       child.once('exit', finish);
     });
   }
@@ -560,7 +705,8 @@ export class ComToolClient extends EventEmitter {
     }
   }
 
-  #onChildError(error) {
+  #onChildError(child, error) {
+    if (child !== this.#child) return;
     this.#fault(new ComToolTransportError(
       'transport_process_error',
       `COM Tool stdio process failed: ${error.message}`,
@@ -572,7 +718,16 @@ export class ComToolClient extends EventEmitter {
     ));
   }
 
-  #onExit(code, signal) {
+  #onExit(child, code, signal) {
+    if (child !== this.#child) {
+      this.#emitEvent('transport.stale_child_exited', {
+        code,
+        signal,
+        pid: child?.pid ?? null
+      });
+      return;
+    }
+
     if (this.#stderrBuffer.length > 0) {
       this.#emitEvent('transport.stderr', {
         message: this.#stderrBuffer

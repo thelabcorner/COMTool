@@ -58,10 +58,9 @@ public sealed class IllustratorAdapter : IHostAdapter, IHostLaunchAdapter
             try
             {
                 appObject = IllustratorComInterop.AttachActive();
-                dynamic app = appObject;
-
-                var version = IllustratorComInterop.RetryRead(
-                    () => Convert.ToString(app.Version) ?? string.Empty);
+                var version = Convert.ToString(
+                    IllustratorComInterop.ReadProperty(appObject, "Version"))
+                    ?? string.Empty;
 
                 var identity = new HostTargetIdentity
                 {

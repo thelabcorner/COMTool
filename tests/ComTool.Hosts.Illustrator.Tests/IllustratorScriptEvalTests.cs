@@ -69,12 +69,29 @@ public sealed class IllustratorScriptEvalTests
     }
 
     [Fact]
+    public void ParseRequestRejectsUnknownResultMode()
+    {
+        using var input = JsonDocument.Parse(
+            """{"kind":"code","source":"return 1;","resultMode":"implicit"}""");
+
+        var error = Assert.Throws<ArgumentException>(
+            () => IllustratorScriptEval.ParseRequest(
+                input.RootElement));
+
+        Assert.Contains(
+            "'resultMode' must be 'capture' or 'discard'",
+            error.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WrapperParsesArgumentsWithSharedEsonAndEmbedsUserSource()
     {
         var request = new ScriptEvalRequest(
             "expression",
             "arguments[0] + arguments[1]",
-            "[2,3]");
+            "[2,3]",
+            "capture");
 
         var wrapper = IllustratorScriptEval.BuildWrapper(request);
 
@@ -94,6 +111,71 @@ public sealed class IllustratorScriptEvalTests
         Assert.Equal(1, wrapper.UserSourceLineCount);
     }
 
+    [Theory]
+    [InlineData("capture")]
+    [InlineData("discard")]
+    public void ParseRequestAcceptsExplicitResultMode(string resultMode)
+    {
+        using var input = JsonDocument.Parse(
+            $$"""{"kind":"code","source":"return null;","resultMode":"{{resultMode}}"}""");
+
+        var request = IllustratorScriptEval.ParseRequest(input.RootElement);
+
+        Assert.Equal(resultMode, request.ResultMode);
+    }
+
+    [Fact]
+    public void ParseRequestDefaultsResultModeToCapture()
+    {
+        using var input = JsonDocument.Parse(
+            """{"kind":"code","source":"return null;"}""");
+
+        var request = IllustratorScriptEval.ParseRequest(input.RootElement);
+
+        Assert.Equal("capture", request.ResultMode);
+    }
+
+    [Fact]
+    public void CaptureEnvelopeDistinguishesMissingValueFromExplicitNull()
+    {
+        var wrapper = new ScriptWrapper("ignored", 1, 1);
+
+        var missing = IllustratorScriptEval.ParseEnvelope(
+            """{"ok":true,"result":null,"resultPresent":false}""",
+            wrapper);
+        var explicitNull = IllustratorScriptEval.ParseEnvelope(
+            """{"ok":true,"result":null,"resultPresent":true}""",
+            wrapper);
+
+        Assert.False(missing.ResultPresent);
+        Assert.True(explicitNull.ResultPresent);
+        Assert.Equal("null", missing.Value?.Kind);
+        Assert.Equal("null", explicitNull.Value?.Kind);
+    }
+
+    [Fact]
+    public void DiscardModeDoesNotSerializeReturnedValue()
+    {
+        var wrapper = IllustratorScriptEval.BuildWrapper(
+            new ScriptEvalRequest(
+                "code",
+                "return {cyclic:true};",
+                "[]",
+                "discard"));
+
+        Assert.Contains(
+            "var __ct_result_present=false;",
+            wrapper.Source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "__ct_validate_json(__ct_result,[],0);",
+            wrapper.Source[
+                wrapper.Source.IndexOf(
+                    "}).apply(null,__ct_args);",
+                    StringComparison.Ordinal)..],
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void WrapperUsesNamespacedEsonFingerprintWithoutEmbeddingRuntime()
     {
@@ -101,7 +183,8 @@ public sealed class IllustratorScriptEvalTests
             new ScriptEvalRequest(
                 "code",
                 "return {value:true};",
-                "[]"));
+                "[]",
+                "capture"));
 
         Assert.Contains(
             "var __ct_g=$.global;",
@@ -124,7 +207,7 @@ public sealed class IllustratorScriptEvalTests
             wrapper.Source,
             StringComparison.Ordinal);
         Assert.Contains(
-            "return ESON.stringify({ok:true,result:__ct_result});",
+            "return ESON.stringify({ok:true,result:__ct_result,resultPresent:__ct_result_present});",
             wrapper.Source,
             StringComparison.Ordinal);
         Assert.Contains(

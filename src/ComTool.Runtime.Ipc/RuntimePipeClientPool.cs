@@ -21,6 +21,7 @@ public sealed class RuntimePipeClientPool : IAsyncDisposable
     private readonly string _pipeName;
     private readonly TimeSpan _connectTimeout;
     private readonly int _maxIdleClients;
+    private readonly bool _selfHeal;
     private readonly ConcurrentBag<RuntimePipeClient> _idle = [];
 
     private int _idleCount;
@@ -30,11 +31,13 @@ public sealed class RuntimePipeClientPool : IAsyncDisposable
         string pipeName,
         TimeSpan connectTimeout,
         int maxIdleClients,
+        bool selfHeal,
         RuntimePipeClient initialClient)
     {
         _pipeName = pipeName;
         _connectTimeout = connectTimeout;
         _maxIdleClients = maxIdleClients;
+        _selfHeal = selfHeal;
         _idle.Add(initialClient);
         _idleCount = 1;
     }
@@ -43,6 +46,7 @@ public sealed class RuntimePipeClientPool : IAsyncDisposable
         string? pipeName = null,
         TimeSpan? connectTimeout = null,
         int maxIdleClients = DefaultMaxIdleClients,
+        bool selfHeal = true,
         CancellationToken cancellationToken = default)
     {
         if (maxIdleClients is < 1 or > 1024)
@@ -76,6 +80,7 @@ public sealed class RuntimePipeClientPool : IAsyncDisposable
             resolvedPipe,
             resolvedTimeout,
             maxIdleClients,
+            selfHeal,
             initialClient);
     }
 
@@ -120,6 +125,15 @@ public sealed class RuntimePipeClientPool : IAsyncDisposable
             }
 
             return result;
+        }
+        catch (RuntimeRequestInterruptedException) when (_selfHeal)
+        {
+            // The active request remains ambiguous and is never replayed.
+            // Drop every idle handle from the same runtime generation so the
+            // next independent request connects fresh instead of walking a
+            // pool full of broken pipes one failure at a time.
+            await InvalidateIdleAsync().ConfigureAwait(false);
+            throw;
         }
         finally
         {
@@ -167,6 +181,18 @@ public sealed class RuntimePipeClientPool : IAsyncDisposable
 
         _idle.Add(client);
         return true;
+    }
+
+    private async Task InvalidateIdleAsync()
+    {
+        while (_idle.TryTake(out var client))
+        {
+            Interlocked.Decrement(
+                ref _idleCount);
+            await client
+                .DisposeAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private void ThrowIfDisposed() =>

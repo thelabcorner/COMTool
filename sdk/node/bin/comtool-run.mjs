@@ -35,13 +35,15 @@ async function main(mode, args) {
 
     const client = new ComToolClient({
       cliPath: options.cliPath,
-      pipeName: options.pipeName
+      pipeName: options.pipeName,
+      selfHeal: options.selfHeal
     });
     runner = new ComToolRunner({ client, onEvent });
 
     const common = {
       args: options.scriptArgs,
       effects: options.effects,
+      resultMode: options.resultMode,
       watchdogMs: options.watchdogMs,
       retryBudgetMs: options.retryBudgetMs,
       recoveryGraceMs: options.recoveryGraceMs,
@@ -115,16 +117,22 @@ function printHelp() {
   console.log(JSON.stringify({
     ok: true,
     product: 'COM Tool V2 Node runner',
+    agentHint:
+      "AI/automation agents: run 'ComTool.Cli.exe agent-guide --content' first. It emits COMTool's packaged skill, safety contract, and OpenFork command guidance.",
     commands: [
       'run <file.jsx> [--timeout-ms <ms>] [--response-timeout-ms <ms>] [--effects <class>] [--args-json <array>] [--target <id>] [--artifact-dir <dir>]',
-      'test <file.jsx> [--timeout-ms <ms>] [--response-timeout-ms <ms>] [--expect-json <json>] [--args-json <array>] [--target <id>] [--artifact-dir <dir>]',
-      'eval (--expr <source> | --code <source>) [--timeout-ms <ms>] [--response-timeout-ms <ms>] [--effects <class>] [--args-json <array>] [--target <id>] [--artifact-dir <dir>]',
-      'test-eval (--expr <source> | --code <source>) [--timeout-ms <ms>] [--response-timeout-ms <ms>] [--expect-json <json>] [--args-json <array>] [--target <id>] [--artifact-dir <dir>]'
+      'test <file.jsx> [--timeout-ms <ms>] [--response-timeout-ms <ms>] [--expect-json <json>] [--args-json <array>] [--discard-result] [--no-self-heal] [--target <id>] [--artifact-dir <dir>]',
+      'eval (--expr <source> | --code <source>) [--timeout-ms <ms>] [--response-timeout-ms <ms>] [--effects <class>] [--args-json <array>] [--discard-result] [--no-self-heal] [--target <id>] [--artifact-dir <dir>]',
+      'test-eval (--expr <source> | --code <source>) [--timeout-ms <ms>] [--response-timeout-ms <ms>] [--expect-json <json>] [--args-json <array>] [--discard-result] [--no-self-heal] [--target <id>] [--artifact-dir <dir>]'
     ],
     transport:
       'Persistent NDJSON proxy through ComTool.Cli.exe stdio -> existing RuntimeHost pipe.',
     timeoutSemantics:
       '--timeout-ms controls the runtime worker watchdog; --response-timeout-ms only stops the Node caller from waiting and is ambiguous after submission.',
+    resultSemantics:
+      'Results are captured by default with explicit result-presence metadata; --discard-result executes without transporting the script return value.',
+    selfHealing:
+      'Transport self-healing is enabled by default for future/not-yet-submitted requests; --no-self-heal disables it. Submitted requests are never replayed automatically.',
     recovery:
       '--terminate-host-on-ambiguous is explicit opt-in break-glass recovery; it is never automatic.'
   }));

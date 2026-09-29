@@ -35,6 +35,16 @@
                            "mutationResolution":  "fixed"
                        },
                        {
+                           "name":  "core.adobe.probe",
+                           "version":  "1",
+                           "mutationClass":  "read_only",
+                           "requiresTarget":  false,
+                           "executionScope":  "runtime",
+                           "host":  null,
+                           "requiresLease":  false,
+                           "mutationResolution":  "fixed"
+                       },
+                       {
                            "name":  "core.incidents.list",
                            "version":  "1",
                            "mutationClass":  "read_only",

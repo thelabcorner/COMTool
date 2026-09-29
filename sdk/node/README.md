@@ -1,10 +1,10 @@
-# COM Tool V2 Node SDK
+# COMTool Node SDK
 
-Pure Node.js access to COM Tool V2's **existing persistent Adobe control plane**, with first-party TypeScript declarations for the stable transport/session/runner envelopes.
+Pure Node.js access to COMTool's **authoritative Adobe control plane**, with first-party TypeScript declarations for the stable transport/session/runner envelopes.
 
-This package is not a second COM implementation and it is not the definition of COM Tool V2. It speaks newline-delimited JSON to `ComTool.Cli.exe stdio`, which forwards the same versioned `OperationRequest` objects into the installed `RuntimeHost -> RuntimeSupervisor -> Worker -> Adobe host` path used by the other V2 surfaces.
+This package is not a second COM implementation and it does not define a parallel automation runtime. It sends the same versioned `OperationRequest` objects into the `RuntimeHost -> RuntimeSupervisor -> Worker -> Adobe host` execution kernel used by COMTool's other surfaces.
 
-The primary API is deliberately generic so new V2 operations—ExtendScript, Illustrator DOM operations, native-plugin/debugger tooling, agent manipulation, and future Adobe-host capabilities—become usable from Node without changing the transport.
+The primary API is deliberately generic so new operations—ExtendScript, Illustrator DOM operations, native-plugin/debugger tooling, agent manipulation, and future Adobe-host capabilities—become usable from Node without changing the transport.
 
 ## Generic control surface
 
@@ -36,7 +36,7 @@ const futureOperation = await client.execute(
 await client.close();
 ```
 
-`ComToolClient.execute(operation, input, options)` accepts arbitrary registered V2 operations. `ComToolRunner.listOperations()` and `describeOperation(name)` query the live RuntimeHost-owned catalog, so an agent can discover the installed runtime's exact operation version, mutation class, target/lease requirements, execution scope, host binding, and mutation-resolution rule instead of trusting package docs or a stale checked-in registry. Target-specific support remains authoritative through `session.capabilities()` / `core.target.capabilities`; catalog membership and live target support are intentionally distinct facts.
+`ComToolClient.execute(operation, input, options)` accepts arbitrary registered COMTool operations. `ComToolRunner.listOperations()` and `describeOperation(name)` query the live RuntimeHost-owned catalog, so an agent can discover the installed runtime's exact operation version, mutation class, target/lease requirements, execution scope, host binding, and mutation-resolution rule instead of trusting package docs or a stale checked-in registry. Target-specific support remains authoritative through `session.capabilities()` / `core.target.capabilities`; catalog membership and live target support are intentionally distinct facts.
 
 The client keeps one persistent stdio proxy alive and correlates concurrent responses by request ID. Completion order is intentionally independent of submission order: the proxy can dispatch overlapping requests over separate pooled runtime-pipe connections, allowing a control/recovery call to complete while another execution request remains blocked. The proxy itself admits bounded concurrent NDJSON requests and leases independent pooled runtime-pipe connections, so a later runtime-only control request is not head-of-line blocked behind a hung host execution.
 
@@ -113,6 +113,41 @@ reassembles in order, and verifies the final SHA-256 before returning the bytes.
 This runtime artifact surface is separate from the optional local JSON run-log
 files produced by `writeArtifact()` / `artifactDir`.
 
+## Local CI / real-engine runtime ownership
+
+For local CI and build tools that need the **real Adobe engine**, use `ComToolLocalRuntime`. By default it starts a private RuntimeHost directly in stdio mode with an isolated temporary state root, so the SDK talks to the same RuntimeSupervisor without creating an extra COM implementation or a forgotten machine-wide daemon.
+
+```js
+import { ComToolLocalRuntime } from '@comtool/v2-node';
+
+const local = await ComToolLocalRuntime.start({ host: 'illustrator' });
+try {
+  const session = await local.openSession({
+    launch: true,
+    lease: true,
+    leaseTtlMs: 600_000,
+    leaseWaitMs: 60_000
+  });
+
+  const run = await session.testFile({
+    path: './dist/library-live-test.jsx',
+    expected: { ok: true },
+    watchdogMs: 180_000
+  });
+
+  if (run.exitCode !== 0) throw new Error(run.classification);
+  await session.releaseLease();
+} finally {
+  await local.close();
+}
+```
+
+The local harness owns only the RuntimeHost/state root it created; closing it closes the stdio transport and removes that temporary state. Passing `pipeName` deliberately switches to attach mode against an already-running RuntimeHost and therefore does **not** claim ownership of that runtime.
+
+Target selection is strong-generation-aware, can explicitly launch Illustrator through `core.target.launch`, refuses ambiguous multiple-target selection, can require capabilities such as `script.eval`, waits only for retryable external lease contention, and stabilizes the selected worker before exposing the session. This is the intended integration point for ESTC: ESTC owns ES3/build/test semantics, while COMTool owns target discovery, launch, leases, watchdogs, mutation classification, and real ExtendScript execution.
+
+The neutral explicit binary overrides for a local build/package are `COMTOOL_CLI_PATH`, `COMTOOL_RUNTIME_HOST_PATH`, and `COMTOOL_WORKER_PATH`; all three must be supplied together so a local gate cannot mix binary generations. Existing `COMTOOL_V2_*` environment spellings remain accepted as implementation-compatibility aliases.
+
 ## ExtendScript run/test orchestration
 
 `ComToolRunner` layers ergonomic script execution on top of the generic client. `runFile()` performs target discovery, file SHA-256 pinning, target-lease acquisition, stable request-ID creation, structured classification, cleanup, and optional JSON artifact emission while still dispatching exactly one `script.runFile` operation through the ordinary runtime path. `runEval()` provides the same orchestration for inline `script.eval`; its result metadata records a SHA-256 and character count for the source without persisting the source text itself.
@@ -140,7 +175,7 @@ await runner.close();
 
 ### Caller-controlled watchdog
 
-`watchdogMs` is forwarded to V2 as `policy.workerWatchdogMs`; it is not replaced by the old 60-second broker default.
+`watchdogMs` is forwarded to the runtime as `policy.workerWatchdogMs`; it is not replaced by the old 60-second broker default.
 
 Supported range:
 
@@ -173,7 +208,7 @@ try {
 }
 ```
 
-`responseTimeoutMs` is deliberately separate from `watchdogMs`: it is only a caller-side response-wait bound. A response wait that expires after submission is ambiguous and retains an owned lease for reconciliation/recovery. Likewise, a worker watchdog timeout after dispatch never means "the script did not run." V2 preserves its ordinary started/ambiguous semantics and the runner never silently replays a potentially-mutating script.
+`responseTimeoutMs` is deliberately separate from `watchdogMs`: it is only a caller-side response-wait bound. A response wait that expires after submission is ambiguous and retains an owned lease for reconciliation/recovery. Likewise, a worker watchdog timeout after dispatch never means "the script did not run." COMTool preserves its ordinary started/ambiguous semantics and the runner never silently replays a potentially-mutating script.
 
 ## Break-glass host recovery
 
@@ -275,8 +310,8 @@ The package ships `index.d.ts` and a type-aware package `exports` map. Operation
 
 - No Adobe COM calls exist in the Node package.
 - No parallel worker/runtime implementation exists in the Node package.
-- All operations use the existing V2 protocol and persistent runtime.
-- Stable request IDs and V2's durable mutation ledger remain authoritative.
+- All operations use COMTool's existing protocol and authoritative runtime.
+- Stable request IDs and COMTool's durable mutation ledger remain authoritative.
 - A lost, locally timed-out, or caller-aborted response after submission is treated conservatively.
 - Caller wait cancellation never masquerades as runtime/Adobe cancellation.
 - Potentially-mutating ExtendScript is never silently retried.

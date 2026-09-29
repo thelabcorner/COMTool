@@ -1,6 +1,7 @@
 import {
   ComToolClient,
   ComToolDebugSession,
+  ComToolLocalRuntime,
   ComToolRunner,
   ComToolTargetSession,
   terminateHostGeneration,
@@ -13,6 +14,35 @@ import {
   type OperationResult,
   type TargetDescriptor
 } from '@comtool/v2-node';
+
+async function exerciseLocalRuntimeTypes() {
+  const local = new ComToolLocalRuntime({
+    selfHeal: false,
+    layout: {
+      kind: 'explicit',
+      root: null,
+      cliPath: 'C:\\ComTool.Cli.exe',
+      runtimeHostPath: 'C:\\ComTool.RuntimeHost.exe',
+      workerPath: 'C:\\ComTool.Worker.exe'
+    }
+  });
+  local.layout.cliPath;
+  local.pipeName;
+  local.stateDir;
+  local.started;
+  await local.start({ startupTimeoutMs: 20_000 });
+  const target = await local.selectTarget({ launch: true });
+  target.target.id;
+  const session = await local.openSession({
+    targetId: target.target.id,
+    lease: true,
+    leaseTtlMs: 300_000
+  });
+  session.target.target.id;
+  await local.close();
+}
+
+void exerciseLocalRuntimeTypes;
 
 async function exercise(client: ComToolClient, target: TargetDescriptor) {
   const generic = await client.execute<{ ok: boolean }>(
@@ -160,10 +190,13 @@ async function exercise(client: ComToolClient, target: TargetDescriptor) {
 
   const tested = await session.testEval<number>({
     source: '6*7',
+    resultMode: 'capture',
     expected: 42
   });
   const value: number | undefined = tested.value;
+  const resultPresent: boolean | null = tested.resultPresent;
   void value;
+  void resultPresent;
 
   if (tested.ambiguous) {
     await terminateHostGeneration(runner, tested, {

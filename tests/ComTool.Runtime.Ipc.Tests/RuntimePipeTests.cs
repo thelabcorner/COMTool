@@ -203,6 +203,183 @@ public sealed class RuntimePipeTests
     }
 
     [Fact]
+    public async Task ClientPoolSelfHealPurgesStaleIdleGenerationWithoutReplayingInterruptedRequest()
+    {
+        var pipeName = UniquePipe();
+        using var firstServerCts = new CancellationTokenSource();
+        var enteredCount = 0;
+        var bothEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSeed = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var firstServer = new RuntimePipeServer(
+            async (request, cancellationToken) =>
+            {
+                if (request.Id.StartsWith("seed-", StringComparison.Ordinal))
+                {
+                    if (Interlocked.Increment(ref enteredCount) == 2)
+                        bothEntered.TrySetResult();
+
+                    await releaseSeed.Task
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                return Success(
+                    request,
+                    ProtocolValue.FromString(request.Id));
+            },
+            pipeName);
+
+        var firstServerTask =
+            firstServer.RunAsync(firstServerCts.Token);
+
+        await using var pool =
+            await RuntimePipeClientPool.ConnectAsync(
+                pipeName,
+                maxIdleClients: 2,
+                selfHeal: true);
+
+        var seedA = pool.ExecuteAsync(
+            Request("seed-a", "core.test"));
+        var seedB = pool.ExecuteAsync(
+            Request("seed-b", "core.test"));
+
+        await bothEntered.Task
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        releaseSeed.TrySetResult();
+        await Task.WhenAll(seedA, seedB);
+
+        firstServerCts.Cancel();
+        await firstServerTask;
+
+        using var replacementCts = new CancellationTokenSource();
+        var replacement = new RuntimePipeServer(
+            (request, _) => Task.FromResult(Success(
+                request,
+                ProtocolValue.FromString("replacement:" + request.Id))),
+            pipeName);
+        var replacementTask = replacement.RunAsync(replacementCts.Token);
+
+        try
+        {
+            var interrupted =
+                await Assert.ThrowsAsync<RuntimeRequestInterruptedException>(
+                    () => pool.ExecuteAsync(
+                        Request(
+                            "first-after-restart",
+                            "core.test")));
+
+            Assert.Equal(
+                "first-after-restart",
+                interrupted.RequestId);
+            Assert.Equal(
+                ExecutionState.Ambiguous,
+                interrupted.Execution);
+
+            var recovered = await pool.ExecuteAsync(
+                Request(
+                    "second-after-restart",
+                    "core.test"));
+
+            Assert.True(recovered.Ok);
+            Assert.Equal(
+                "replacement:second-after-restart",
+                recovered.Result?.Value?.GetString());
+        }
+        finally
+        {
+            replacementCts.Cancel();
+            await replacementTask;
+        }
+    }
+
+    [Fact]
+    public async Task ClientPoolSelfHealOptOutLeavesStaleIdleConnectionsFailFast()
+    {
+        var pipeName = UniquePipe();
+        using var firstServerCts = new CancellationTokenSource();
+        var enteredCount = 0;
+        var bothEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSeed = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var firstServer = new RuntimePipeServer(
+            async (request, cancellationToken) =>
+            {
+                if (request.Id.StartsWith("seed-", StringComparison.Ordinal))
+                {
+                    if (Interlocked.Increment(ref enteredCount) == 2)
+                        bothEntered.TrySetResult();
+
+                    await releaseSeed.Task
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                return Success(
+                    request,
+                    ProtocolValue.FromString(request.Id));
+            },
+            pipeName);
+
+        var firstServerTask =
+            firstServer.RunAsync(firstServerCts.Token);
+
+        await using var pool =
+            await RuntimePipeClientPool.ConnectAsync(
+                pipeName,
+                maxIdleClients: 2,
+                selfHeal: false);
+
+        var seedA = pool.ExecuteAsync(
+            Request("seed-a", "core.test"));
+        var seedB = pool.ExecuteAsync(
+            Request("seed-b", "core.test"));
+
+        await bothEntered.Task
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        releaseSeed.TrySetResult();
+        await Task.WhenAll(seedA, seedB);
+
+        firstServerCts.Cancel();
+        await firstServerTask;
+
+        using var replacementCts = new CancellationTokenSource();
+        var replacement = new RuntimePipeServer(
+            (request, _) => Task.FromResult(Success(
+                request,
+                ProtocolValue.FromString("replacement:" + request.Id))),
+            pipeName);
+        var replacementTask = replacement.RunAsync(replacementCts.Token);
+
+        try
+        {
+            await Assert.ThrowsAsync<RuntimeRequestInterruptedException>(
+                () => pool.ExecuteAsync(
+                    Request("stale-one", "core.test")));
+            await Assert.ThrowsAsync<RuntimeRequestInterruptedException>(
+                () => pool.ExecuteAsync(
+                    Request("stale-two", "core.test")));
+
+            var fresh = await pool.ExecuteAsync(
+                Request("fresh-third", "core.test"));
+
+            Assert.True(fresh.Ok);
+            Assert.Equal(
+                "replacement:fresh-third",
+                fresh.Result?.Value?.GetString());
+        }
+        finally
+        {
+            replacementCts.Cancel();
+            await replacementTask;
+        }
+    }
+
+    [Fact]
     public async Task MalformedClientIsDroppedWithoutPoisoningServer()
     {
         var pipeName = UniquePipe();

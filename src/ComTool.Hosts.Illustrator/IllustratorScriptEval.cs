@@ -57,7 +57,8 @@ internal static class IllustratorScriptEval
             "kind",
             "source",
             "effects",
-            "args"
+            "args",
+            "resultMode"
         };
 
         foreach (var property in input.EnumerateObject())
@@ -131,7 +132,35 @@ internal static class IllustratorScriptEval
                     $"'args' exceeds the {MaxArgsJsonChars} character transport limit.");
         }
 
-        return new ScriptEvalRequest(kind, source, argsJson);
+        return new ScriptEvalRequest(
+            kind,
+            source,
+            argsJson,
+            ParseResultMode(input));
+    }
+
+    internal static string ParseResultMode(JsonElement input)
+    {
+        if (!input.TryGetProperty("resultMode", out var modeElement) ||
+            modeElement.ValueKind == JsonValueKind.Null)
+        {
+            return "capture";
+        }
+
+        if (modeElement.ValueKind != JsonValueKind.String)
+        {
+            throw new ArgumentException(
+                "'resultMode' must be 'capture' or 'discard'.");
+        }
+
+        var mode = modeElement.GetString();
+        if (mode is not ("capture" or "discard"))
+        {
+            throw new ArgumentException(
+                "'resultMode' must be 'capture' or 'discard'.");
+        }
+
+        return mode;
     }
 
     public static ScriptEvalOutcome Execute(
@@ -348,13 +377,27 @@ internal static class IllustratorScriptEval
             ? "\n);"
             : string.Empty;
 
+        var resultTransport = request.ResultMode == "discard"
+            ? """
+              var __ct_result_present=false;
+              __ct_result=null;
+              return ESON.stringify({ok:true,result:__ct_result,resultPresent:__ct_result_present});
+              """
+            : """
+              var __ct_result_present=(__ct_result!==void 0);
+              if(!__ct_result_present){__ct_result=null;}
+              __ct_validate_json(__ct_result,[],0);
+              return ESON.stringify({ok:true,result:__ct_result,resultPresent:__ct_result_present});
+              """;
+
         var suffix =
             """
             
               }).apply(null,__ct_args);
-              if(__ct_result===void 0){__ct_result=null;}
-              __ct_validate_json(__ct_result,[],0);
-              return ESON.stringify({ok:true,result:__ct_result});
+            """ +
+            resultTransport +
+            """
+
             }catch(__ct_e){
               return __ct_error(__ct_e);
             }
@@ -502,9 +545,29 @@ internal static class IllustratorScriptEval
                         ExecutionState.Ambiguous);
                 }
 
+                var resultPresent = true;
+                if (root.TryGetProperty(
+                        "resultPresent",
+                        out var resultPresentElement))
+                {
+                    if (resultPresentElement.ValueKind is not (
+                            JsonValueKind.True or
+                            JsonValueKind.False))
+                    {
+                        throw new HostAdapterException(
+                            "script_transport_invalid",
+                            "Successful script envelope contained an invalid resultPresent flag.",
+                            retryable: false,
+                            ExecutionState.Ambiguous);
+                    }
+
+                    resultPresent = resultPresentElement.GetBoolean();
+                }
+
                 return new ScriptEvalOutcome(
                     true,
                     ProtocolValue.From(result),
+                    resultPresent,
                     null);
             }
 
@@ -541,6 +604,7 @@ internal static class IllustratorScriptEval
             return new ScriptEvalOutcome(
                 false,
                 null,
+                false,
                 new ScriptEvalError(
                     name ?? "Error",
                     message ?? "Unknown ExtendScript error.",
@@ -570,7 +634,8 @@ internal static class IllustratorScriptEval
 internal sealed record ScriptEvalRequest(
     string Kind,
     string Source,
-    string ArgsJson);
+    string ArgsJson,
+    string ResultMode);
 
 internal sealed record ScriptWrapper(
     string Source,
@@ -580,6 +645,7 @@ internal sealed record ScriptWrapper(
 internal sealed record ScriptEvalOutcome(
     bool Ok,
     ProtocolValue? Value,
+    bool ResultPresent,
     ScriptEvalError? Error);
 
 internal sealed record ScriptEvalError(

@@ -55,6 +55,21 @@ Deterministic random streams and sampling for ExtendScript.
 **[ESUUID](https://github.com/thelabcorner/es-uuid)**  
 RFC 9562 UUID generation, parsing, and conversion for ExtendScript.
 
+**[ESENV](https://github.com/thelabcorner/es-env)**  
+Environment and capability detection for ExtendScript.
+
+**[ESPATH](https://github.com/thelabcorner/es-path)**  
+Deterministic Windows/POSIX path and RFC 8089 file-URI transformations.
+
+**[ESFS](https://github.com/thelabcorner/es-fs)**  
+Synchronous ExtendScript File/Folder I/O with explicit text, BINARY, and replacement semantics.
+
+**[ESHASH](https://github.com/thelabcorner/es-hash)**  
+CRC-32/ISO-HDLC and SHA-256 for byte strings and UTF-8 text.
+
+**[ESLOG](https://github.com/thelabcorner/es-log)**  
+Structured logging with bounded text and JSONL sinks.
+
 </td>
 <td width="50%" valign="top">
 
@@ -81,6 +96,9 @@ Native state and durable storage for Adobe tooling.
 **[COMTool](https://github.com/thelabcorner/COMTool)**  
 Guarded COM, ExtendScript, plug-in, and debugger automation for Adobe desktop apps.
 
+**ESsemble** <sub>coming soon</sub>  
+Typed framework, resolver, and composition layer for the ExtendScript toolkit.
+
 **ESOBF** <sub>coming soon</sub>  
 Obfuscation for hardened JSX distribution.
 
@@ -98,6 +116,7 @@ Also from the same team: **[ArcFit.dev](https://arcfit.dev)**, deterministic arc
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Agent Automation](#agent-automation)
 - [API Reference](#api-reference)
 - [Validation](#validation)
 - [Performance](#performance)
@@ -221,6 +240,7 @@ In another shell:
 
 ```powershell
 .\ComTool.Cli.exe health
+.\ComTool.Cli.exe probe
 .\ComTool.Cli.exe targets
 ```
 
@@ -233,6 +253,12 @@ Read Illustrator state:
 
 The runtime's machine-readable operation catalog is authoritative. Programmatic clients can query `core.operations.list` and `core.operation.describe` rather than hard-coding assumptions about the available surface.
 
+`probe` is deliberately broader than target discovery. It reports live
+process presence, COM registration, runtime configuration, and whether this
+COMTool build actually contains an automation adapter for each known Adobe
+desktop family. A detected application is not automatically an
+automation-capable application.
+
 Effectful work requires the runtime's mutation policy to be satisfied. Fixed mutation operations cannot be weakened by caller input, and arbitrary script execution cannot declare itself read-only.
 
 The optional MCP entry point remains a thin transport adapter:
@@ -242,6 +268,36 @@ The optional MCP entry point remains a thin transport adapter:
 ```
 
 For programmatic Node usage, see [`sdk/node/README.md`](sdk/node/README.md). The SDK forwards ordinary runtime operations; it contains no independent Adobe/COM implementation.
+
+---
+
+## Agent Automation
+
+COMTool ships its own agent bundle inside every release under `agent/`:
+`agent/SKILL.md`, `agent/AGENT_CONTRACT.md`, and a portable OpenFork
+slash-command definition at `agent/openfork/comtool.md`.
+
+Agents can discover those installed assets without knowing the installation
+path:
+
+```powershell
+.\ComTool.Cli.exe agent-guide
+.\ComTool.Cli.exe agent-guide --content
+```
+
+Both `ComTool.Cli.exe help` and the packaged Node runner's `--help` output
+also include a short agent bootstrap hint pointing to `agent-guide --content`,
+so an unfamiliar agent can discover the full contract through normal CLI
+exploration.
+
+The agent workflow starts with the live dynamic probe, then consults the
+runtime-owned operation catalog and exact target capabilities before choosing
+an execution path. This avoids teaching agents a stale hard-coded command
+surface and prevents a detected Photoshop/InDesign/etc. installation from
+being mistaken for a fully implemented COMTool adapter.
+
+The complete machine-facing safety and discovery contract is documented in
+[`agent/AGENT_CONTRACT.md`](agent/AGENT_CONTRACT.md).
 
 ---
 
@@ -267,6 +323,7 @@ Core runtime operations include:
 - `core.operations.list`
 - `core.operation.describe`
 - `core.operation.examples`
+- `core.adobe.probe`
 - `core.artifact.describe`
 - `core.artifact.read`
 - `core.incidents.list`

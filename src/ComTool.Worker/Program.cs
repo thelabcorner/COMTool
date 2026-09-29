@@ -247,6 +247,16 @@ internal static class Program
                             ExecutionState.NotStarted)
                 };
             }
+            catch (HostAdapterException ex)
+            {
+                response = Error(
+                    command,
+                    ex.Kind,
+                    ex.Message,
+                    ex.Execution,
+                    ex.HResultCode,
+                    ex.Retryable);
+            }
             catch (Exception ex)
             {
                 var mutationClass =

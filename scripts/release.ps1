@@ -27,6 +27,7 @@ $RuntimeIdentifierPattern = '^[A-Za-z0-9][A-Za-z0-9.-]*$'
 
 $root = Split-Path -Parent $PSScriptRoot
 $dotnet = Join-Path $PSScriptRoot "dotnet.ps1"
+$nugetConfig = Join-Path $root "NuGet.Config"
 $defaultAipDebugCtlPath = [IO.Path]::GetFullPath(
     (Join-Path $root "..\aip-debug\build\Release\aipdebugctl.exe")
 )
@@ -47,6 +48,9 @@ if ([string]::IsNullOrWhiteSpace($RuntimeIdentifier) -or
 }
 if ($SkipTests -and -not $AllowDirty) {
     throw "-SkipTests is permitted only with -AllowDirty for non-production validation."
+}
+if (-not (Test-Path -LiteralPath $nugetConfig -PathType Leaf)) {
+    throw "Repository-owned NuGet configuration was not found at '$nugetConfig'."
 }
 
 $releaseRoot = Join-Path $root ".artifacts\release"
@@ -117,6 +121,7 @@ function Invoke-PackageVerification {
 
     foreach ($property in @(
         "stableEntrypoints",
+        "stableAgentBundle",
         "liveRuntimeUninstallRefused",
         "damagedInstallRepair",
         "sourceInstallDisjointPreflight",
@@ -513,7 +518,7 @@ New-Item -ItemType Directory -Force -Path $publishRoot, $packageRoot, $sdkArtifa
 
 try {
     Invoke-Checked {
-        & $dotnet restore (Join-Path $root "ComTool.V2.slnx") --locked-mode
+        & $dotnet restore (Join-Path $root "ComTool.V2.slnx") --locked-mode --configfile $nugetConfig
     } "Locked dependency restore"
 
     $auditLines = @(& $dotnet list (Join-Path $root "ComTool.V2.slnx") package --vulnerable --include-transitive --format json --no-restore)
@@ -544,7 +549,7 @@ try {
 
     if (-not $SkipTests) {
         Invoke-Checked {
-            & $dotnet restore (Join-Path $root "ComTool.V2.slnx") --locked-mode --artifacts-path $sdkArtifactsRoot
+            & $dotnet restore (Join-Path $root "ComTool.V2.slnx") --locked-mode --configfile $nugetConfig --artifacts-path $sdkArtifactsRoot
         } "Locked isolated gate restore"
         Invoke-Checked {
             & $dotnet build (Join-Path $root "ComTool.V2.slnx") -c Release --no-restore --artifacts-path $sdkArtifactsRoot
@@ -588,7 +593,7 @@ try {
         Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty) -ExpectedTreeFingerprint $sourceTreeFingerprint -GitRoot $gitRoot.Trim()
 
         Invoke-Checked {
-            & $dotnet restore $projectPath -r $RuntimeIdentifier --locked-mode --artifacts-path $sdkArtifactsRoot "-p:NuGetLockFilePath=$ridLockFile"
+            & $dotnet restore $projectPath -r $RuntimeIdentifier --locked-mode --configfile $nugetConfig --artifacts-path $sdkArtifactsRoot "-p:NuGetLockFilePath=$ridLockFile"
         } "Locked RID restore $name"
 
         Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty) -ExpectedTreeFingerprint $sourceTreeFingerprint -GitRoot $gitRoot.Trim()
@@ -657,6 +662,7 @@ try {
         "lib\runner.mjs",
         "lib\recovery.mjs",
         "lib\session.mjs",
+        "lib\local-runtime.mjs",
         "bin\comtool-run.mjs"
     )
     foreach ($relativePath in $nodeSdkRequired) {
@@ -666,9 +672,24 @@ try {
         }
     }
 
-    Invoke-Checked {
-        & $nodeCommand.Source (Join-Path $nodeSdkDestination "bin\comtool-run.mjs") --help | Out-Null
-    } "Staged Node SDK import/CLI smoke"
+    $nodeHelpText = (
+        & $nodeCommand.Source (
+            Join-Path $nodeSdkDestination "bin\comtool-run.mjs"
+        ) --help | Out-String
+    )
+    if ($LASTEXITCODE -ne 0) {
+        throw "Staged Node SDK import/CLI smoke failed with exit code $LASTEXITCODE."
+    }
+    try {
+        $nodeHelp = $nodeHelpText | ConvertFrom-Json
+    }
+    catch {
+        throw "Staged Node SDK help did not return valid JSON: $nodeHelpText"
+    }
+    if (-not [bool]$nodeHelp.ok -or
+        [string]$nodeHelp.agentHint -notlike "*agent-guide --content*") {
+        throw "Staged Node SDK help does not advertise the COMTool agent bootstrap."
+    }
 
     $signingEnabled =
         -not [string]::IsNullOrWhiteSpace($SignToolPath) -or

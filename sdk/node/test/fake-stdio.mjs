@@ -503,14 +503,25 @@ for await (const line of rl) {
       break;
 
     case 'script.eval':
-      response = success(
-        request,
-        request.input?.kind === 'expression' &&
-        request.input?.source === '6*7'
-          ? 42
-          : null,
-        'known_changed'
-      );
+      {
+        const discard = request.input?.resultMode === 'discard';
+        const present = !discard && (
+          request.input?.kind === 'expression' ||
+          /\breturn\b/.test(String(request.input?.source ?? ''))
+        );
+        const value = discard
+          ? null
+          : request.input?.kind === 'expression' &&
+            request.input?.source === '6*7'
+            ? 42
+            : null;
+        response = scriptSuccess(
+          request,
+          value,
+          present,
+          'known_changed'
+        );
+      }
       break;
 
     case 'script.runFile':
@@ -531,12 +542,20 @@ for await (const line of rl) {
           }
         };
       } else {
-        response = success(request, {
-          watchdogMs: request.policy?.workerWatchdogMs ?? null,
-          expectedSha256: request.input?.expectedSha256 ?? null,
-          args: request.input?.args ?? null,
-          effects: request.input?.effects ?? null
-        }, 'known_changed');
+        const discard = request.input?.resultMode === 'discard';
+        response = scriptSuccess(
+          request,
+          discard
+            ? null
+            : {
+                watchdogMs: request.policy?.workerWatchdogMs ?? null,
+                expectedSha256: request.input?.expectedSha256 ?? null,
+                args: request.input?.args ?? null,
+                effects: request.input?.effects ?? null
+              },
+          !discard,
+          'known_changed'
+        );
       }
       break;
 
@@ -564,6 +583,23 @@ function success(request, value, targetState = 'known') {
       value
     }
   };
+}
+
+function scriptSuccess(
+  request,
+  value,
+  present,
+  targetState = 'known'
+) {
+  const response = success(request, value, targetState);
+  response.evidence = [{
+    kind: 'script.result',
+    value: {
+      mode: request.input?.resultMode ?? 'capture',
+      present
+    }
+  }];
+  return response;
 }
 
 function inferKind(value) {

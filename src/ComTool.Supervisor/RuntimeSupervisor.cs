@@ -652,6 +652,38 @@ public sealed partial class RuntimeSupervisor : IAsyncDisposable
                     clock.Elapsed.TotalMilliseconds);
             }
 
+            case "core.adobe.probe":
+            {
+                try
+                {
+                    var payload = AdobeHostProbe.Execute(
+                        request.Input,
+                        _hosts);
+
+                    return Success(
+                        request,
+                        ProtocolValue.From(payload),
+                        TargetState.Known,
+                        clock.Elapsed.TotalMilliseconds);
+                }
+                catch (AdobeHostProbeException ex)
+                {
+                    return Failure(
+                        request,
+                        OperationStatus.InvalidRequest,
+                        TargetState.Known,
+                        ex.Kind,
+                        ex.Message,
+                        ExecutionState.NotStarted,
+                        clock.Elapsed.TotalMilliseconds,
+                        suggestedActions:
+                        [
+                            "core.adobe.probe",
+                            "core.operations.list"
+                        ]);
+                }
+            }
+
             case "core.incidents.list":
             {
                 var incidents = _mutationLedger.ListUnresolved();

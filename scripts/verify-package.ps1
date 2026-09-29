@@ -252,12 +252,42 @@ try {
         "sdk\node\lib\runner.mjs",
         "sdk\node\lib\recovery.mjs",
         "sdk\node\lib\session.mjs",
+        "sdk\node\lib\local-runtime.mjs",
         "sdk\node\bin\comtool-run.mjs"
     )) {
         $sdkPath = Join-Path $expectedCurrentRoot $sdkRelative
         if (-not (Test-Path -LiteralPath $sdkPath -PathType Leaf)) {
             throw "Installed Node SDK surface '$sdkRelative' is missing from the stable current path."
         }
+    }
+
+    foreach ($agentRelative in @(
+        "agent\README.md",
+        "agent\SKILL.md",
+        "agent\AGENT_CONTRACT.md",
+        "agent\openfork\comtool.md"
+    )) {
+        $agentPath = Join-Path $expectedCurrentRoot $agentRelative
+        if (-not (Test-Path -LiteralPath $agentPath -PathType Leaf)) {
+            throw "Installed agent surface '$agentRelative' is missing from the stable current path."
+        }
+    }
+
+    $nativeHelp = Read-JsonObject ((& ([string]$installed.cli) help | Out-String))
+    if (-not [bool]$nativeHelp.ok -or
+        [string]$nativeHelp.agentHint -notlike "*agent-guide --content*") {
+        throw "Installed CLI help does not advertise the COMTool agent bootstrap."
+    }
+
+    $agentGuide = Read-JsonObject ((& ([string]$installed.cli) agent-guide --content | Out-String))
+    if (-not [bool]$agentGuide.ok -or
+        -not (Test-Path -LiteralPath ([string]$agentGuide.agent.skillPath) -PathType Leaf) -or
+        -not (Test-Path -LiteralPath ([string]$agentGuide.agent.contractPath) -PathType Leaf) -or
+        -not (Test-Path -LiteralPath ([string]$agentGuide.agent.openForkCommandPath) -PathType Leaf) -or
+        [string]::IsNullOrWhiteSpace([string]$agentGuide.content.skill) -or
+        [string]::IsNullOrWhiteSpace([string]$agentGuide.content.contract) -or
+        [string]::IsNullOrWhiteSpace([string]$agentGuide.content.openForkCommand)) {
+        throw "Installed CLI agent-guide did not expose the packaged agent surfaces."
     }
 
     $installedNativeHelper = Join-Path $expectedCurrentRoot "aipdebugctl.exe"
@@ -511,6 +541,7 @@ try {
         stateSchemaVersion = $runtimeStateSchemaVersion
         stableEntrypoints = $true
         stableNodeSdk = $true
+        stableAgentBundle = $true
         stableNativeHelper = $true
         liveRuntimeUninstallRefused = $true
         damagedInstallRepair = $true

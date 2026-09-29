@@ -31,6 +31,10 @@ export type ScriptEffects =
   | 'document_lifecycle'
   | 'external_side_effect';
 
+export type ScriptResultMode =
+  | 'capture'
+  | 'discard';
+
 export type MutationClass =
   | 'read_only'
   | ScriptEffects
@@ -475,6 +479,7 @@ export interface ComToolClientOptions {
   env?: Record<string, string | undefined>;
   spawnImpl?: (...args: any[]) => any;
   maxResponseBytes?: number;
+  selfHeal?: boolean;
   transportCommand?: {
     command: string;
     args: string[];
@@ -517,7 +522,7 @@ export class ComToolClient {
     request: OperationRequest,
     options?: RequestWaitOptions
   ): Promise<OperationResult<T>>;
-  close(options?: { killAfterMs?: number }): Promise<void>;
+  close(options?: { killAfterMs?: number; forceKillWaitMs?: number }): Promise<void>;
   on(event: 'event', listener: (event: ComToolEvent) => void): this;
   on(event: string, listener: (...args: any[]) => void): this;
 }
@@ -571,6 +576,7 @@ export interface RunResult<T = unknown> {
   script: Record<string, unknown>;
   lease: Lease | null;
   operation: OperationResult<T> | null;
+  resultPresent: boolean | null;
   value?: T;
   transportError?: Record<string, unknown> | null;
   cleanupError?: Record<string, unknown> | null;
@@ -603,6 +609,7 @@ export interface OpenSessionOptions extends SelectTargetOptions {
 export interface ScriptCommonOptions extends RequestWaitOptions {
   args?: unknown[];
   effects?: ScriptEffects;
+  resultMode?: ScriptResultMode;
   watchdogMs?: number;
   retryBudgetMs?: number;
   recoveryGraceMs?: number;
@@ -793,6 +800,75 @@ export class ComToolDebugSession {
     options?: SessionExecuteOptions
   ): Promise<OperationResult>;
 }
+
+export interface LocalComToolLayout {
+  kind: 'explicit' | 'package' | 'workspace' | 'installed';
+  root: string | null;
+  cliPath: string;
+  runtimeHostPath: string;
+  workerPath: string;
+}
+
+export interface LocalComToolRuntimeOptions {
+  layout?: LocalComToolLayout;
+  env?: Record<string, string | undefined>;
+  host?: string;
+  pipeName?: string;
+  stateDir?: string;
+  spawnImpl?: (...args: any[]) => any;
+  selfHeal?: boolean;
+  startupTimeoutMs?: number;
+}
+
+export interface LocalComToolTargetOptions {
+  host?: string;
+  targetId?: string;
+  launch?: boolean;
+  progId?: string;
+  expectedHostVersion?: string;
+  launchTimeoutMs?: number;
+  discoveryStabilizeMs?: number;
+  requiredCapabilities?: string[];
+}
+
+export interface LocalComToolSessionOptions
+  extends LocalComToolTargetOptions {
+  lease?: boolean;
+  leaseTtlMs?: number;
+  leaseWaitMs?: number;
+  workerStabilizeMs?: number;
+  targetRebindMs?: number;
+}
+
+export function resolveLocalComToolLayout(options?: {
+  env?: Record<string, string | undefined>;
+  productRoot?: string;
+}): LocalComToolLayout;
+
+export class ComToolLocalRuntime {
+  constructor(options?: LocalComToolRuntimeOptions);
+  static start(
+    options?: LocalComToolRuntimeOptions
+  ): Promise<ComToolLocalRuntime>;
+  readonly layout: LocalComToolLayout;
+  readonly pipeName: string | null;
+  readonly stateDir: string | null;
+  readonly runner: ComToolRunner;
+  readonly started: boolean;
+  start(options?: { startupTimeoutMs?: number }): Promise<this>;
+  selectTarget(
+    options?: LocalComToolTargetOptions
+  ): Promise<TargetDescriptor>;
+  openSession(
+    options?: LocalComToolSessionOptions
+  ): Promise<ComToolTargetSession>;
+  close(): Promise<void>;
+}
+
+export function withLocalComTool<T>(
+  options: LocalComToolRuntimeOptions,
+  callback: (runtime: ComToolLocalRuntime) => T | Promise<T>
+): Promise<T>;
 
 export class ComToolRunner {
   constructor(options?: RunnerOptions);

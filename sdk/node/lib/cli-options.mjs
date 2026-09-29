@@ -4,7 +4,9 @@ export function parseRunnerArgs(mode, args) {
   const positionals = [];
   const flagOptions = new Set([
     '--verbose',
-    '--terminate-host-on-ambiguous'
+    '--terminate-host-on-ambiguous',
+    '--discard-result',
+    '--no-self-heal'
   ]);
   const valueOptions = new Set([
     '--path',
@@ -155,6 +157,7 @@ export function parseRunnerArgs(mode, args) {
     source,
     scriptArgs,
     effects: values.get('--effects') ?? 'unknown',
+    resultMode: flags.has('--discard-result') ? 'discard' : 'capture',
     watchdogMs: parseInteger(
       values.get('--timeout-ms'),
       60_000,
@@ -190,6 +193,7 @@ export function parseRunnerArgs(mode, args) {
     preconditions,
     postconditions,
     verbose: flags.has('--verbose'),
+    selfHeal: !flags.has('--no-self-heal'),
     terminateHostOnAmbiguous:
       flags.has('--terminate-host-on-ambiguous'),
     recoveryWaitMs: parseInteger(

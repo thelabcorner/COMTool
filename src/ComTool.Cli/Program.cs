@@ -48,6 +48,8 @@ internal static class Program
                     requestedTargetId: null,
                     requiresTarget: false,
                     pipeName: ParseOption(args, "--pipe")),
+                "agent-guide" => RunAgentGuide(args),
+                "probe" => RunAdobeProbe(args),
                 "incidents" => RunRuntimeOperation(
                     "core.incidents.list",
                     requestedTargetId: null,
@@ -165,6 +167,86 @@ internal static class Program
             pipeName: ParseOption(args, "--pipe"));
     }
 
+    private static int RunAgentGuide(string[] args)
+    {
+        var packageRoot = Path.GetFullPath(AppContext.BaseDirectory);
+        var agentRoot = Path.Combine(packageRoot, "agent");
+        var skillPath = Path.Combine(agentRoot, "SKILL.md");
+        var contractPath = Path.Combine(agentRoot, "AGENT_CONTRACT.md");
+        var openForkCommandPath = Path.Combine(
+            agentRoot,
+            "openfork",
+            "comtool.md");
+
+        var required = new[]
+        {
+            skillPath,
+            contractPath,
+            openForkCommandPath
+        };
+        var missing = required
+            .Where(static path => !File.Exists(path))
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            return WriteError(
+                "agent_assets_missing",
+                "COMTool's packaged agent assets are incomplete: " +
+                string.Join(", ", missing),
+                ["repair_or_reinstall_comtool"]);
+        }
+
+        var includeContent = HasFlag(args, "--content");
+        Console.Out.WriteLine(JsonSerializer.Serialize(new
+        {
+            ok = true,
+            product = "COM Tool V2",
+            version = ProductVersion,
+            packageRoot,
+            agent = new
+            {
+                skillPath,
+                contractPath,
+                openForkCommandPath
+            },
+            bootstrap = new[]
+            {
+                "ComTool.Cli.exe health",
+                "ComTool.Cli.exe probe",
+                "ComTool.Cli.exe targets",
+                "core.operations.list",
+                "core.target.capabilities"
+            },
+            content = includeContent
+                ? new
+                {
+                    skill = File.ReadAllText(skillPath),
+                    contract = File.ReadAllText(contractPath),
+                    openForkCommand = File.ReadAllText(openForkCommandPath)
+                }
+                : null
+        }, JsonOptions));
+        return 0;
+    }
+
+    private static int RunAdobeProbe(string[] args)
+    {
+        var input = JsonSerializer.SerializeToElement(
+            new
+            {
+                host = ParseOption(args, "--host"),
+                includeUndetected = !HasFlag(args, "--detected-only")
+            },
+            JsonOptions);
+
+        return RunRuntimeOperation(
+            "core.adobe.probe",
+            requestedTargetId: null,
+            requiresTarget: false,
+            input: input,
+            pipeName: ParseOption(args, "--pipe"));
+    }
+
     private static int RunComCallRead(string[] args)
     {
         var path = RequireOption(args, "--path");
@@ -240,6 +322,9 @@ internal static class Program
         }
 
         var effects = ParseOption(args, "--effects");
+        var resultMode = HasFlag(args, "--discard-result")
+            ? "discard"
+            : "capture";
         var scriptArgs = ParseJsonArrayOption(args, "--args-json");
         var leaseId = RequireOption(args, "--lease");
         var requestId = RequireOption(args, "--request-id");
@@ -262,7 +347,8 @@ internal static class Program
                     : "code",
                 source = expression ?? code!,
                 effects,
-                args = scriptArgs
+                args = scriptArgs,
+                resultMode
             },
             JsonOptions);
 
@@ -292,6 +378,9 @@ internal static class Program
         var effects = ParseOption(
             args,
             "--effects");
+        var resultMode = HasFlag(args, "--discard-result")
+            ? "discard"
+            : "capture";
         var scriptArgs = ParseJsonArrayOption(
             args,
             "--args-json");
@@ -318,7 +407,8 @@ internal static class Program
                 path,
                 expectedSha256,
                 effects,
-                args = scriptArgs
+                args = scriptArgs,
+                resultMode
             },
             JsonOptions);
 
@@ -673,8 +763,11 @@ internal static class Program
 
         var pipeName = RuntimeEndpoint.ResolvePipeName(
             ParseOption(args, "--pipe"));
+        var selfHeal = !HasFlag(args, "--no-self-heal");
         var pool = RuntimePipeClientPool
-            .ConnectAsync(pipeName)
+            .ConnectAsync(
+                pipeName,
+                selfHeal: selfHeal)
             .GetAwaiter()
             .GetResult();
         var dispatcher =
@@ -714,16 +807,69 @@ internal static class Program
         : IOperationDispatcher,
           IAsyncDisposable
     {
-        public ValueTask<OperationResult> ExecuteAsync(
+        public async ValueTask<OperationResult> ExecuteAsync(
             OperationRequest request,
-            CancellationToken cancellationToken = default) =>
-            new(pool.ExecuteAsync(
-                request,
-                cancellationToken:
-                    cancellationToken));
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return await pool
+                    .ExecuteAsync(
+                        request,
+                        cancellationToken:
+                            cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (RuntimeRequestInterruptedException ex)
+            {
+                return RuntimeTransportFailure(
+                    request,
+                    "runtime_request_interrupted",
+                    ex.Message,
+                    retryable: false,
+                    ex.Execution,
+                    ["inspect_runtime", "inspect_mutation_ledger"]);
+            }
+            catch (Exception ex) when (
+                ex is TimeoutException or IOException)
+            {
+                return RuntimeTransportFailure(
+                    request,
+                    "runtime_unreachable",
+                    ex.Message,
+                    retryable: true,
+                    ExecutionState.NotStarted,
+                    ["start_runtime", "inspect_runtime"]);
+            }
+        }
 
         public ValueTask DisposeAsync() =>
             pool.DisposeAsync();
+
+        private static OperationResult RuntimeTransportFailure(
+            OperationRequest request,
+            string kind,
+            string message,
+            bool retryable,
+            ExecutionState execution,
+            IReadOnlyList<string> suggestedActions) =>
+            new()
+            {
+                ProtocolVersion = ProtocolVersion.Current,
+                Id = request.Id,
+                Operation = request.Operation,
+                Ok = false,
+                Status = OperationStatus.Failed,
+                TargetState = TargetState.Unavailable,
+                Error = new ProtocolError
+                {
+                    Kind = kind,
+                    Message = message,
+                    Retryable = retryable,
+                    Execution = execution,
+                    SuggestedActions = suggestedActions
+                }
+            };
     }
 
     private static RuntimePipeClient ConnectRuntime(string? pipeName)
@@ -1074,13 +1220,18 @@ internal static class Program
             informationalVersion = InformationalVersion,
             protocolVersion = ProtocolVersion.Current,
             phase = "production-foundation",
+            agentHint =
+                "AI/automation agents: run 'ComTool.Cli.exe agent-guide --content' first. " +
+                "It emits COMTool's packaged skill, safety contract, and OpenFork command guidance.",
             commands = new[]
             {
                 "health [--pipe <name>]",
+                "agent-guide [--content]",
+                "probe [--host <adobe-host>] [--detected-only] [--pipe <name>]",
                 "incidents [--pipe <name>]",
                 "artifact-describe --artifact-id <id> [--pipe <name>]",
                 "artifact-read --artifact-id <id> [--offset <bytes>] [--length <bytes>] [--pipe <name>]",
-                "stdio [--pipe <name>]",
+                "stdio [--pipe <name>] [--no-self-heal]",
                 "targets [--pipe <name>]",
                 "capabilities [--target <id>] [--host <host>] [--lease <id>] [--pipe <name>]",
                 "status [--target <id>] [--host <host>] [--lease <id>] [--pipe <name>]",
@@ -1096,8 +1247,8 @@ internal static class Program
                 "call-read --path <allowlisted-com-method> [--args-json <array>] [--target <id>] [--host <host>] [--lease <id>] [--pipe <name>]",
                 "artboards (--name <name> | --index <n> | --active) [--target <id>] [--host <host>] [--pipe <name>]",
                 "layers (--name <name> | --index <n> | --active) [--target <id>] [--host <host>] [--pipe <name>]",
-                "eval --lease <id> --request-id <stable-id> [--timeout-ms <100-3600000>] [--retry-budget-ms <0-3600000>] [--pipe <name>] (--expr <source> | --code <source>) [--effects <write-class>] [--args-json <array>] [--preconditions-json <array> | --preconditions-file <path>] [--postconditions-json <array> | --postconditions-file <path>] [--target <id>] [--host <host>]",
-                "run-file --lease <id> --request-id <stable-id> --path <absolute-jsx-or-jsxbin> --sha256 <expected-sha256> [--timeout-ms <100-3600000>] [--retry-budget-ms <0-3600000>] [--pipe <name>] [--effects <write-class>] [--args-json <array>] [--preconditions-json <array> | --preconditions-file <path>] [--postconditions-json <array> | --postconditions-file <path>] [--target <id>] [--host <host>]"
+                "eval --lease <id> --request-id <stable-id> [--timeout-ms <100-3600000>] [--retry-budget-ms <0-3600000>] [--pipe <name>] (--expr <source> | --code <source>) [--effects <write-class>] [--args-json <array>] [--discard-result] [--preconditions-json <array> | --preconditions-file <path>] [--postconditions-json <array> | --postconditions-file <path>] [--target <id>] [--host <host>]",
+                "run-file --lease <id> --request-id <stable-id> --path <absolute-jsx-or-jsxbin> --sha256 <expected-sha256> [--timeout-ms <100-3600000>] [--retry-budget-ms <0-3600000>] [--pipe <name>] [--effects <write-class>] [--args-json <array>] [--discard-result] [--preconditions-json <array> | --preconditions-file <path>] [--postconditions-json <array> | --postconditions-file <path>] [--target <id>] [--host <host>]"
             }
         }, JsonOptions));
         return 0;

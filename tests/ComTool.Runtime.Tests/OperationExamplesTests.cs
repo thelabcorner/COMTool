@@ -11,7 +11,7 @@ public sealed class OperationExamplesTests
     {
         var examples = OperationExamplesRegistry.All;
 
-        Assert.Equal(23, examples.Count);
+        Assert.Equal(24, examples.Count);
         Assert.Equal(
             examples.Count,
             examples.Select(static example => example.Id)

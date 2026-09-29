@@ -18,6 +18,7 @@ public sealed class OperationCatalogIntegrationTests
     [Theory]
     [InlineData("core.operations.list")]
     [InlineData("core.operation.describe")]
+    [InlineData("core.adobe.probe")]
     public void RuntimeOperationIntrospectionIsReadOnlyAndTargetIndependent(
         string name)
     {

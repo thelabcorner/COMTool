@@ -25,3 +25,9 @@ export {
   ComToolDebugSession,
   ComToolTargetSession
 } from './lib/session.mjs';
+
+export {
+  ComToolLocalRuntime,
+  resolveLocalComToolLayout,
+  withLocalComTool
+} from './lib/local-runtime.mjs';

@@ -7,6 +7,149 @@ namespace ComTool.Supervisor.Tests;
 public sealed class RuntimeOperationRoutingTests
 {
     [Fact]
+    public async Task AdobeProbeRunsWithoutTargetWorkerAndReportsTruthfulSupportTier()
+    {
+        var stateDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "comtool-v2-runtime-operation-tests",
+            Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            await using var runtime = new RuntimeSupervisor(
+                ["illustrator"],
+                new WorkerBrokerOptions
+                {
+                    WorkerExecutablePath =
+                        Path.Combine(stateDirectory, "does-not-exist.exe")
+                },
+                stateDirectory);
+
+            using var input = JsonDocument.Parse(
+                """{"host":"photoshop","includeUndetected":true}""");
+
+            var result = await runtime.ExecuteAsync(
+                new OperationRequest
+                {
+                    ProtocolVersion = ProtocolVersion.Current,
+                    Id = "adobe-probe-runtime-route",
+                    Operation = "core.adobe.probe",
+                    Input = input.RootElement.Clone()
+                });
+
+            Assert.True(result.Ok, result.Error?.Message);
+            Assert.Equal(OperationStatus.Completed, result.Status);
+            var payload = result.Result!.Value!.Value;
+            Assert.Equal("1", payload.GetProperty("probeVersion").GetString());
+            var host = Assert.Single(
+                payload.GetProperty("hosts").EnumerateArray());
+            Assert.Equal("photoshop", host.GetProperty("host").GetString());
+            Assert.False(host.GetProperty("adapterAvailable").GetBoolean());
+            Assert.Equal(
+                "probe_only",
+                host.GetProperty("automationTier").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(stateDirectory))
+                Directory.Delete(stateDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AdobeProbeRejectsUnknownHostWithoutWorkerDispatch()
+    {
+        var stateDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "comtool-v2-runtime-operation-tests",
+            Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            await using var runtime = new RuntimeSupervisor(
+                ["illustrator"],
+                new WorkerBrokerOptions
+                {
+                    WorkerExecutablePath =
+                        Path.Combine(stateDirectory, "does-not-exist.exe")
+                },
+                stateDirectory);
+
+            using var input = JsonDocument.Parse(
+                """{"host":"not-an-adobe-host"}""");
+
+            var result = await runtime.ExecuteAsync(
+                new OperationRequest
+                {
+                    ProtocolVersion = ProtocolVersion.Current,
+                    Id = "adobe-probe-invalid-host",
+                    Operation = "core.adobe.probe",
+                    Input = input.RootElement.Clone()
+                });
+
+            Assert.False(result.Ok);
+            Assert.Equal(OperationStatus.InvalidRequest, result.Status);
+            Assert.Equal("unknown_adobe_host", result.Error?.Kind);
+            Assert.Equal(
+                ExecutionState.NotStarted,
+                result.Error?.Execution);
+        }
+        finally
+        {
+            if (Directory.Exists(stateDirectory))
+                Directory.Delete(stateDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AdobeProbeAcceptsCliShapedNullHost()
+    {
+        var stateDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "comtool-v2-runtime-operation-tests",
+            Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            await using var runtime = new RuntimeSupervisor(
+                ["illustrator"],
+                new WorkerBrokerOptions
+                {
+                    WorkerExecutablePath =
+                        Path.Combine(stateDirectory, "does-not-exist.exe")
+                },
+                stateDirectory);
+
+            using var input = JsonDocument.Parse(
+                """{"host":null,"includeUndetected":true}""");
+
+            var result = await runtime.ExecuteAsync(
+                new OperationRequest
+                {
+                    ProtocolVersion = ProtocolVersion.Current,
+                    Id = "adobe-probe-null-host",
+                    Operation = "core.adobe.probe",
+                    Input = input.RootElement.Clone()
+                });
+
+            Assert.True(result.Ok, result.Error?.Message);
+            Assert.Equal(OperationStatus.Completed, result.Status);
+            var payload = result.Result!.Value!.Value;
+            Assert.Equal(
+                10,
+                payload.GetProperty("hosts").GetArrayLength());
+            Assert.Equal(
+                JsonValueKind.Null,
+                payload.GetProperty("requestedHost").ValueKind);
+        }
+        finally
+        {
+            if (Directory.Exists(stateDirectory))
+                Directory.Delete(stateDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ScriptValidateRunsWithoutTargetWorkerOrHostDispatch()
     {
         var stateDirectory = Path.Combine(

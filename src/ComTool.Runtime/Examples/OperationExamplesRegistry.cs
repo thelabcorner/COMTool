@@ -404,6 +404,19 @@ public static class OperationExamplesRegistry
             ["discovery", "examples"]),
 
         Example(
+            "adobe-probe-all",
+            "core.adobe.probe",
+            "Probe Adobe desktop hosts",
+            "Observe process presence, COM registration, and COMTool adapter availability without activating an Adobe application.",
+            """{"includeUndetected":true}""",
+            ["discovery", "adobe", "probe"],
+            notes:
+            [
+                "Probe-only does not imply automation support; inspect adapterAvailable and automationTier.",
+                "For an adapter-backed running host, follow with core.targets.list and core.target.capabilities."
+            ]),
+
+        Example(
             "artifact-describe",
             "core.artifact.describe",
             "Describe one runtime artifact",

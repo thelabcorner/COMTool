@@ -13,6 +13,7 @@ internal static class IllustratorComInterop
     private const int RpcECallRejected = unchecked((int)0x80010001);
     private const int RpcEServerCallRetryLater = unchecked((int)0x8001010A);
     private const int RpcSCallFailed = unchecked((int)0x800706BE);
+    private const int RpcSServerUnavailable = unchecked((int)0x800706BA);
 
     private static readonly AsyncLocal<TimeSpan?> RequestRetryBudget = new();
 
@@ -188,6 +189,20 @@ internal static class IllustratorComInterop
                     ex);
             }
         }
+    }
+
+    public static object? ReadProperty(
+        object target,
+        string property,
+        TimeSpan? retryBudget = null)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(property);
+        EnsureSta();
+
+        return RetryRead(
+            () => InvokePropertyGetOnce(target, property),
+            retryBudget);
     }
 
     public static T RetryRead<T>(
@@ -432,6 +447,36 @@ internal static class IllustratorComInterop
         }
     }
 
+    private static object? InvokePropertyGetOnce(
+        object target,
+        string property)
+    {
+        try
+        {
+            return target
+                .GetType()
+                .InvokeMember(
+                    property,
+                    BindingFlags.GetProperty |
+                    BindingFlags.OptionalParamBinding,
+                    binder: null,
+                    target,
+                    args: [],
+                    modifiers: null,
+                    culture: CultureInfo.InvariantCulture,
+                    namedParameters: null);
+        }
+        catch (TargetInvocationException ex)
+            when (ex.InnerException is COMException comException)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                .Capture(comException)
+                .Throw();
+
+            throw;
+        }
+    }
+
     private static object? InvokeMethodOnce(
         object target,
         string method,
@@ -496,7 +541,10 @@ internal static class IllustratorComInterop
         hresult is RpcECallRejected or RpcEServerCallRetryLater;
 
     private static bool IsRetryableBusy(int hresult) =>
-        hresult is RpcECallRejected or RpcEServerCallRetryLater or RpcSCallFailed;
+        hresult is RpcECallRejected or
+            RpcEServerCallRetryLater or
+            RpcSCallFailed or
+            RpcSServerUnavailable;
 
     private static string Classify(int hresult) =>
         hresult switch

@@ -31,7 +31,8 @@ internal static class IllustratorScriptRunFile
             "path",
             "expectedSha256",
             "effects",
-            "args"
+            "args",
+            "resultMode"
         };
 
         foreach (var property in input.EnumerateObject())
@@ -142,7 +143,8 @@ internal static class IllustratorScriptRunFile
         return new ScriptRunFileRequest(
             path,
             expectedSha256,
-            argsJson);
+            argsJson,
+            IllustratorScriptEval.ParseResultMode(input));
     }
 
     public static ScriptEvalOutcome Execute(
@@ -161,7 +163,8 @@ internal static class IllustratorScriptRunFile
             new ScriptEvalRequest(
                 "code",
                 source,
-                request.ArgsJson),
+                request.ArgsJson,
+                request.ResultMode),
             scriptExecutor);
 
         // Measured legacy/live behavior: an exception originating inside
@@ -317,4 +320,5 @@ internal static class IllustratorScriptRunFile
 internal sealed record ScriptRunFileRequest(
     string Path,
     string ExpectedSha256,
-    string ArgsJson);
+    string ArgsJson,
+    string ResultMode);

@@ -36,6 +36,13 @@ public static class BuiltInOperations
             MutationResolution: MutationResolutionMode.Fixed),
 
         new OperationDefinition(
+            "core.adobe.probe",
+            MutationClass.ReadOnly,
+            RequiresTarget: false,
+            Scope: OperationExecutionScope.Runtime,
+            MutationResolution: MutationResolutionMode.Fixed),
+
+        new OperationDefinition(
             "core.artifact.describe",
             MutationClass.ReadOnly,
             RequiresTarget: false,

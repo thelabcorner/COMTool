@@ -30,6 +30,7 @@ public sealed class IllustratorScriptRunFileTests : IDisposable
                      """{"path":"C:\\probe.jsx","expectedSha256":"not-a-hash"}""",
                      """{"path":"C:\\probe.jsx","expectedSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","args":{"x":1}}""",
                      """{"path":"C:\\probe.jsx","expectedSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","effects":"read_only"}""",
+                     """{"path":"C:\\probe.jsx","expectedSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","resultMode":"implicit"}""",
                      """{"path":"C:\\probe.jsx","expectedSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","unexpected":true}"""
                  })
         {
@@ -64,6 +65,7 @@ public sealed class IllustratorScriptRunFileTests : IDisposable
         Assert.Equal(
             """[1, "two", {"x":true}]""".Replace(" ", string.Empty),
             parsed.ArgsJson.Replace(" ", string.Empty));
+        Assert.Equal("capture", parsed.ResultMode);
     }
 
     [Fact]
@@ -152,7 +154,8 @@ public sealed class IllustratorScriptRunFileTests : IDisposable
         var parsed = new ScriptRunFileRequest(
             path,
             new string('0', 64),
-            "[]");
+            "[]",
+            "capture");
         var dispatchCount = 0;
 
         var error = Assert.Throws<HostAdapterException>(
@@ -285,7 +288,8 @@ public sealed class IllustratorScriptRunFileTests : IDisposable
         new(
             Path.GetFullPath(path),
             Sha256(path),
-            """[1,"two",{"x":true}]""");
+            """[1,"two",{"x":true}]""",
+            "capture");
 
     private string WriteScript(
         string name,

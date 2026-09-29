@@ -15,6 +15,7 @@ import {
   ComToolClient,
   ComToolRunner,
   ComToolTransportError,
+  resolveLocalComToolLayout,
   terminateHostGeneration,
   unwrapProtocolValue
 } from '../index.mjs';
@@ -23,14 +24,57 @@ import { parseRunnerArgs } from '../lib/cli-options.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const fakeTransport = join(here, 'fake-stdio.mjs');
 
-function createClient() {
+function createClient(options = {}) {
   return new ComToolClient({
     transportCommand: {
       command: process.execPath,
       args: [fakeTransport]
-    }
+    },
+    ...options
   });
 }
+
+test('local runtime layout accepts one complete neutral explicit toolchain', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'comtool-sdk-layout-'));
+  try {
+    const cli = join(dir, 'ComTool.Cli.exe');
+    const runtime = join(dir, 'ComTool.RuntimeHost.exe');
+    const worker = join(dir, 'ComTool.Worker.exe');
+    await Promise.all([
+      writeFile(cli, ''),
+      writeFile(runtime, ''),
+      writeFile(worker, '')
+    ]);
+
+    const layout = resolveLocalComToolLayout({
+      env: {
+        COMTOOL_CLI_PATH: cli,
+        COMTOOL_RUNTIME_HOST_PATH: runtime,
+        COMTOOL_WORKER_PATH: worker
+      },
+      productRoot: join(dir, 'missing-product-root')
+    });
+
+    assert.equal(layout.kind, 'explicit');
+    assert.equal(layout.cliPath, cli);
+    assert.equal(layout.runtimeHostPath, runtime);
+    assert.equal(layout.workerPath, worker);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('local runtime layout rejects partial explicit overrides', () => {
+  assert.throws(
+    () => resolveLocalComToolLayout({
+      env: {
+        COMTOOL_CLI_PATH: 'C:\\fake\\ComTool.Cli.exe'
+      },
+      productRoot: 'C:\\missing'
+    }),
+    /requires COMTOOL_CLI_PATH/
+  );
+});
 
 test('runner CLI parser keeps file/eval modes strict and preserves orchestration controls', () => {
   const evalOptions = parseRunnerArgs('test-eval', [
@@ -63,11 +107,19 @@ test('runner CLI parser keeps file/eval modes strict and preserves orchestration
   assert.equal(evalOptions.hasExpected, true);
   assert.equal(evalOptions.expected, 42);
   assert.equal(evalOptions.terminateHostOnAmbiguous, true);
+  assert.equal(evalOptions.resultMode, 'capture');
+  assert.equal(evalOptions.selfHeal, true);
 
-  const fileOptions = parseRunnerArgs('run', ['probe.jsx']);
+  const fileOptions = parseRunnerArgs('run', [
+    'probe.jsx',
+    '--discard-result',
+    '--no-self-heal'
+  ]);
   assert.equal(fileOptions.path, 'probe.jsx');
   assert.equal(fileOptions.watchdogMs, 60000);
   assert.equal(fileOptions.recoveryGraceMs, 120000);
+  assert.equal(fileOptions.resultMode, 'discard');
+  assert.equal(fileOptions.selfHeal, false);
 
   assert.throws(
     () => parseRunnerArgs('eval', ['--expr', '1', '--code', 'return 1;']),
@@ -636,6 +688,8 @@ test('runEval provides lease/watchdog orchestration with source-hash provenance'
     assert.equal(run.classification, 'completed');
     assert.equal(run.exitCode, 0);
     assert.equal(run.value, 42);
+    assert.equal(run.resultPresent, true);
+    assert.equal(run.script.resultMode, 'capture');
     assert.equal(run.lease.retained, false);
     assert.equal(run.script.kind, 'eval');
     assert.equal(run.script.evalKind, 'expression');
@@ -650,6 +704,50 @@ test('runEval provides lease/watchdog orchestration with source-hash provenance'
   } finally {
     await runner.close();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('runEval distinguishes no return from an explicit null result', async () => {
+  const client = createClient();
+  const runner = new ComToolRunner({ client });
+  try {
+    const missing = await runner.runEval({
+      kind: 'code',
+      source: '1+1;'
+    });
+    const explicitNull = await runner.runEval({
+      kind: 'code',
+      source: 'return null;'
+    });
+
+    assert.equal(missing.classification, 'completed');
+    assert.equal(missing.resultPresent, false);
+    assert.equal(missing.value, undefined);
+    assert.equal(explicitNull.classification, 'completed');
+    assert.equal(explicitNull.resultPresent, true);
+    assert.equal(explicitNull.value, null);
+  } finally {
+    await runner.close();
+  }
+});
+
+test('discard result mode executes without surfacing a script return value', async () => {
+  const client = createClient();
+  const runner = new ComToolRunner({ client });
+  try {
+    const run = await runner.runEval({
+      kind: 'expression',
+      source: '6*7',
+      resultMode: 'discard'
+    });
+
+    assert.equal(run.classification, 'completed');
+    assert.equal(run.resultPresent, false);
+    assert.equal(run.value, undefined);
+    assert.equal(run.script.resultMode, 'discard');
+    assert.equal(run.operation.result.kind, 'null');
+  } finally {
+    await runner.close();
   }
 });
 
@@ -672,6 +770,8 @@ test('runFile SHA-pins bytes and forwards caller watchdog instead of a hard-code
 
     assert.equal(run.classification, 'completed');
     assert.equal(run.exitCode, 0);
+    assert.equal(run.resultPresent, true);
+    assert.equal(run.script.resultMode, 'capture');
     assert.equal(run.lease.retained, false);
     assert.equal(run.value.watchdogMs, 180_000);
     assert.deepEqual(run.value.args, ['lane-v5']);
@@ -776,6 +876,81 @@ test('transport loss after submission is surfaced as ambiguous and is never retr
   }
 });
 
+test('default self-healing rebuilds a dead transport for the next request only', async () => {
+  const client = createClient();
+  const events = [];
+  client.on('event', event => events.push(event));
+  try {
+    await assert.rejects(
+      client.execute(
+        'crash.after-read',
+        { possibleMutation: true },
+        { id: 'self-heal-crash' }
+      ),
+      error => {
+        assert.ok(error instanceof ComToolTransportError);
+        assert.equal(error.submitted, true);
+        assert.equal(error.requestId, 'self-heal-crash');
+        return true;
+      }
+    );
+
+    const recovered = await client.execute(
+      'core.echo',
+      { after: 'transport-restart' },
+      { id: 'self-heal-next-request' }
+    );
+
+    assert.equal(recovered.ok, true);
+    assert.equal(
+      unwrapProtocolValue(recovered.result).echo.after,
+      'transport-restart'
+    );
+    assert.ok(
+      events.some(event =>
+        event.event === 'transport.self_heal.completed'
+      )
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test('self-healing opt-out keeps a faulted transport fail-fast', async () => {
+  const client = createClient({ selfHeal: false });
+  try {
+    await assert.rejects(
+      client.execute(
+        'crash.after-read',
+        { possibleMutation: true },
+        { id: 'no-self-heal-crash' }
+      ),
+      error => {
+        assert.ok(error instanceof ComToolTransportError);
+        assert.equal(error.submitted, true);
+        return true;
+      }
+    );
+
+    await assert.rejects(
+      client.execute(
+        'core.echo',
+        { shouldNotSubmit: true },
+        { id: 'no-self-heal-next-request' }
+      ),
+      error => {
+        assert.ok(error instanceof ComToolTransportError);
+        assert.equal(error.kind, 'transport_unavailable');
+        assert.equal(error.submitted, false);
+        assert.equal(error.requestId, 'no-self-heal-next-request');
+        return true;
+      }
+    );
+  } finally {
+    await client.close();
+  }
+});
+
 test('transport ambiguity exposes an auto-generated request id for reconciliation', async () => {
   const client = createClient();
   try {
@@ -823,6 +998,54 @@ test('testEval applies one-shot assertions without persisting inline source', as
   } finally {
     await runner.close();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('testEval reports a missing return distinctly from explicit null', async () => {
+  const client = createClient();
+  const runner = new ComToolRunner({ client });
+  try {
+    const missing = await runner.testEval({
+      kind: 'code',
+      source: '1+1;',
+      expected: null
+    });
+    const explicitNull = await runner.testEval({
+      kind: 'code',
+      source: 'return null;',
+      expected: null
+    });
+
+    assert.equal(missing.verdict, 'failed');
+    assert.equal(missing.classification, 'test_failed');
+    assert.equal(missing.resultPresent, false);
+    assert.match(
+      missing.assertionError.message,
+      /without a captured result/
+    );
+    assert.equal(explicitNull.verdict, 'passed');
+    assert.equal(explicitNull.resultPresent, true);
+    assert.equal(explicitNull.value, null);
+  } finally {
+    await runner.close();
+  }
+});
+
+test('testEval rejects discard mode when a result assertion was requested', async () => {
+  const client = createClient();
+  const runner = new ComToolRunner({ client });
+  try {
+    await assert.rejects(
+      runner.testEval({
+        kind: 'expression',
+        source: '6*7',
+        resultMode: 'discard',
+        expected: 42
+      }),
+      /cannot be used with expected\/assert result checks/
+    );
+  } finally {
+    await runner.close();
   }
 });
 

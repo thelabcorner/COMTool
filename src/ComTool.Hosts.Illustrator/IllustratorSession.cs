@@ -676,7 +676,20 @@ internal sealed class IllustratorSession : IHostSession
                 request,
                 outcome.Value
                 ?? throw new InvalidOperationException(
-                    "Successful script-file execution produced no protocol value."));
+                    "Successful script-file execution produced no protocol value."))
+                with
+                {
+                    Evidence =
+                    [
+                        new EvidenceItem(
+                            "script.result",
+                            JsonSerializer.SerializeToElement(new
+                            {
+                                mode = parsed.ResultMode,
+                                present = outcome.ResultPresent
+                            }))
+                    ]
+                };
         }
 
         var scriptError = outcome.Error
@@ -869,7 +882,20 @@ internal sealed class IllustratorSession : IHostSession
                 request,
                 outcome.Value
                 ?? throw new InvalidOperationException(
-                    "Successful script evaluation produced no protocol value."));
+                    "Successful script evaluation produced no protocol value."))
+                with
+                {
+                    Evidence =
+                    [
+                        new EvidenceItem(
+                            "script.result",
+                            JsonSerializer.SerializeToElement(new
+                            {
+                                mode = parsed.ResultMode,
+                                present = outcome.ResultPresent
+                            }))
+                    ]
+                };
         }
 
         var scriptError = outcome.Error

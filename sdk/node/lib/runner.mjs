@@ -666,6 +666,7 @@ export class ComToolRunner {
     path,
     args = [],
     effects = 'unknown',
+    resultMode = 'capture',
     watchdogMs = DEFAULT_WORKER_WATCHDOG_MS,
     retryBudgetMs,
     recoveryGraceMs = DEFAULT_RECOVERY_GRACE_MS,
@@ -694,6 +695,7 @@ export class ComToolRunner {
     try {
       fullPath = normalizeScriptPath(path);
       validateScriptEffects(effects);
+      validateResultMode(resultMode);
       validateWatchdog(watchdogMs);
       validateRetryBudget(retryBudgetMs);
       validateAbortSignal(signal);
@@ -741,7 +743,8 @@ export class ComToolRunner {
         path: fullPath,
         sha256,
         watchdogMs,
-        effects
+        effects,
+        resultMode
       });
 
       executionStage = 'execution';
@@ -752,7 +755,8 @@ export class ComToolRunner {
             path: fullPath,
             expectedSha256: sha256,
             effects,
-            args
+            args,
+            resultMode
           },
           {
             id: requestId,
@@ -805,6 +809,11 @@ export class ComToolRunner {
         }
       }
 
+      const resultPresent = resolveScriptResultPresent(
+        operationResult,
+        resultMode
+      );
+
       const run = {
         kind: 'comtool-v2-run',
         mode: 'run',
@@ -823,12 +832,14 @@ export class ComToolRunner {
           name: basename(fullPath),
           sha256,
           effects,
+          resultMode,
           watchdogMs,
           argsCount: args.length
         },
         lease,
         operation: operationResult,
-        value: operationResult?.ok === true
+        resultPresent,
+        value: operationResult?.ok === true && resultPresent !== false
           ? unwrapProtocolValue(operationResult.result)
           : undefined,
         transportError,
@@ -891,6 +902,7 @@ export class ComToolRunner {
           path: fullPath,
           sha256,
           effects,
+          resultMode,
           watchdogMs,
           argsCount: Array.isArray(args) ? args.length : null
         },
@@ -929,6 +941,7 @@ export class ComToolRunner {
     source,
     args = [],
     effects = 'unknown',
+    resultMode = 'capture',
     watchdogMs = DEFAULT_WORKER_WATCHDOG_MS,
     retryBudgetMs,
     recoveryGraceMs = DEFAULT_RECOVERY_GRACE_MS,
@@ -957,6 +970,7 @@ export class ComToolRunner {
       validateEvalKind(kind);
       validateEvalSource(source);
       validateScriptEffects(effects);
+      validateResultMode(resultMode);
       validateWatchdog(watchdogMs);
       validateRetryBudget(retryBudgetMs);
       validateAbortSignal(signal);
@@ -1009,7 +1023,8 @@ export class ComToolRunner {
         sourceSha256,
         sourceChars: source.length,
         watchdogMs,
-        effects
+        effects,
+        resultMode
       });
 
       executionStage = 'execution';
@@ -1020,7 +1035,8 @@ export class ComToolRunner {
             kind,
             source,
             effects,
-            args
+            args,
+            resultMode
           },
           {
             id: requestId,
@@ -1073,6 +1089,11 @@ export class ComToolRunner {
         }
       }
 
+      const resultPresent = resolveScriptResultPresent(
+        operationResult,
+        resultMode
+      );
+
       const run = {
         kind: 'comtool-v2-run',
         mode: 'eval',
@@ -1092,12 +1113,14 @@ export class ComToolRunner {
           sourceSha256,
           sourceChars: source.length,
           effects,
+          resultMode,
           watchdogMs,
           argsCount: args.length
         },
         lease,
         operation: operationResult,
-        value: operationResult?.ok === true
+        resultPresent,
+        value: operationResult?.ok === true && resultPresent !== false
           ? unwrapProtocolValue(operationResult.result)
           : undefined,
         transportError,
@@ -1165,6 +1188,7 @@ export class ComToolRunner {
             ? source.length
             : null,
           effects,
+          resultMode,
           watchdogMs,
           argsCount: Array.isArray(args) ? args.length : null
         },
@@ -1206,6 +1230,8 @@ export class ComToolRunner {
       ...runOptions
     } = options;
 
+    validateTestResultMode(options, assertResult);
+
     const run = await this.runFile({
       ...runOptions,
       artifactDir: undefined
@@ -1226,6 +1252,8 @@ export class ComToolRunner {
       artifactDir,
       ...runOptions
     } = options;
+
+    validateTestResultMode(options, assertResult);
 
     const run = await this.runEval({
       ...runOptions,
@@ -1262,6 +1290,15 @@ export class ComToolRunner {
 
     if (run.classification === 'completed') {
       try {
+        if (
+          (hasExpected || assertResult !== undefined) &&
+          run.resultPresent === false
+        ) {
+          throw new Error(
+            'Script completed without a captured result. Use expression mode or an explicit return when asserting a value.'
+          );
+        }
+
         if (hasExpected && !isDeepStrictEqual(run.value, expected)) {
           throw new Error(
             `Result did not deep-equal expected value. expected=${JSON.stringify(expected)} actual=${JSON.stringify(run.value)}`
@@ -1479,6 +1516,46 @@ function validateRetryBudget(retryBudgetMs) {
       `retryBudgetMs must be an integer between ${MIN_RETRY_BUDGET_MS} and ${MAX_RETRY_BUDGET_MS} ms.`
     );
   }
+}
+
+function validateResultMode(resultMode) {
+  if (resultMode !== 'capture' && resultMode !== 'discard') {
+    throw new TypeError(
+      "resultMode must be either 'capture' or 'discard'."
+    );
+  }
+}
+
+function validateTestResultMode(options, assertResult) {
+  if (
+    options?.resultMode === 'discard' &&
+    (Object.hasOwn(options, 'expected') || assertResult !== undefined)
+  ) {
+    throw new TypeError(
+      "resultMode 'discard' cannot be used with expected/assert result checks."
+    );
+  }
+}
+
+function resolveScriptResultPresent(operationResult, resultMode) {
+  if (operationResult?.ok !== true) return null;
+
+  const evidence = Array.isArray(operationResult.evidence)
+    ? operationResult.evidence.find(item =>
+        item?.kind === 'script.result' &&
+        item?.value != null &&
+        typeof item.value === 'object'
+      )
+    : null;
+
+  if (typeof evidence?.value?.present === 'boolean') {
+    return evidence.value.present;
+  }
+
+  // Older runtimes do not emit result-presence evidence. Preserve their
+  // historical value behavior, except discard is explicit enough to know that
+  // no caller-visible result is intended.
+  return resultMode === 'discard' ? false : null;
 }
 
 function validateAbortSignal(signal) {
