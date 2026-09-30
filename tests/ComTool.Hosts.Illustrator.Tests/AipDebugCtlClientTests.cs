@@ -95,6 +95,57 @@ public sealed class AipDebugCtlClientTests
     }
 
     [Fact]
+    public void PackagedOptionalMissingHelperIsUnavailableAndIgnoresOverride()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            WriteOptionalManifest(root);
+            var overridePath = Path.Combine(root, "override.exe");
+            File.WriteAllBytes(
+                overridePath,
+                "different-helper"u8.ToArray());
+
+            var located = AipDebugCtlClient.LocateFrom(
+                root,
+                overridePath);
+
+            Assert.Null(located);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PackagedOptionalUnavailableHelperRejectsUnmanifestedSibling()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            WriteOptionalManifest(root);
+            File.WriteAllBytes(
+                Path.Combine(root, AipDebugCtlClient.ExecutableName),
+                "unmanifested-helper"u8.ToArray());
+
+            var error = Assert.Throws<AipDebugCtlTrustException>(
+                () => AipDebugCtlClient.LocateFrom(
+                    root,
+                    configured: null));
+
+            Assert.Contains(
+                "unmanifested sibling",
+                error.Message,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void TrustRefusalIsReportedBeforeHelperLaunch()
     {
         var client = new AipDebugCtlClient(
@@ -204,6 +255,28 @@ public sealed class AipDebugCtlClientTests
                         sha256,
                         transport = "vectoripc",
                         required = true
+                    }
+                }
+            });
+        File.WriteAllText(
+            Path.Combine(root, "release-manifest.json"),
+            manifest);
+    }
+
+    private static void WriteOptionalManifest(string root)
+    {
+        var manifest = JsonSerializer.Serialize(
+            new
+            {
+                nativeHelpers = new
+                {
+                    aipdebugctl = new
+                    {
+                        path = AipDebugCtlClient.ExecutableName,
+                        sha256 = (string?)null,
+                        transport = "vectoripc",
+                        required = false,
+                        available = false
                     }
                 }
             });

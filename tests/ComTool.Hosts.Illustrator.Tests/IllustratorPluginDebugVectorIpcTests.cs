@@ -253,6 +253,156 @@ public sealed class IllustratorPluginDebugVectorIpcTests
     }
 
     [Fact]
+    public void ReadOnlyAutoFallsBackToComWhenOptionalHelperIsUnavailable()
+    {
+        var identity = Identity();
+        var ctl = new RecordingCtl
+        {
+            Outcome = new AipDebugCtlOutcome(
+                -1,
+                string.Empty,
+                "aipdebugctl.exe was not packaged.",
+                AipDebugCtlCompletion.Unavailable)
+        };
+        var comCalls = 0;
+        var manager = new IllustratorPluginDebugManager(
+            identity,
+            ctl,
+            (_, _, args) =>
+            {
+                comCalls++;
+                var selector = Assert.IsType<string>(args[1]);
+                if (selector.EndsWith("/discover", StringComparison.Ordinal))
+                {
+                    return
+                        """
+                        {
+                          "ok":true,
+                          "protocol":"AIPDebug/1",
+                          "plugin":"AIPDebug",
+                          "pid":4242,
+                          "endpoint":"aipdbg-authoritative-4242"
+                        }
+                        """;
+                }
+
+                Assert.EndsWith(
+                    "/stats",
+                    selector,
+                    StringComparison.Ordinal);
+                return
+                    """
+                    {
+                      "ok":true,
+                      "protocol":"AIPDebug/1",
+                      "plugin":"AIPDebug",
+                      "pid":4242
+                    }
+                    """;
+            });
+
+        var discover = manager.Execute(
+            Request(
+                IllustratorPluginDebugManager.DiagnosticsOperation,
+                """
+                {
+                  "plugin":"AIPDebug",
+                  "action":"discover",
+                  "transport":"com"
+                }
+                """),
+            new object());
+        Assert.True(discover.Ok, discover.Error?.Message);
+
+        var result = manager.Execute(
+            Request(
+                IllustratorPluginDebugManager.DiagnosticsOperation,
+                """
+                {
+                  "plugin":"AIPDebug",
+                  "action":"stats",
+                  "transport":"auto"
+                }
+                """),
+            new object());
+
+        Assert.True(result.Ok, result.Error?.Message);
+        Assert.Equal(2, comCalls);
+        Assert.NotNull(ctl.Invocation);
+        var value = Value(result);
+        Assert.Equal("com", value.GetProperty("transport").GetString());
+        Assert.Equal(
+            "auto",
+            value.GetProperty("requestedTransport").GetString());
+        Assert.Contains(
+            "not packaged",
+            value.GetProperty("transportFallback").GetString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExplicitIpcFailsWhenOptionalHelperIsUnavailable()
+    {
+        var identity = Identity();
+        var ctl = new RecordingCtl
+        {
+            Outcome = new AipDebugCtlOutcome(
+                -1,
+                string.Empty,
+                "aipdebugctl.exe was not packaged.",
+                AipDebugCtlCompletion.Unavailable)
+        };
+        var comCalls = 0;
+        var manager = new IllustratorPluginDebugManager(
+            identity,
+            ctl,
+            (_, _, _) =>
+            {
+                comCalls++;
+                return
+                    """
+                    {
+                      "ok":true,
+                      "protocol":"AIPDebug/1",
+                      "plugin":"AIPDebug",
+                      "pid":4242,
+                      "endpoint":"aipdbg-authoritative-4242"
+                    }
+                    """;
+            });
+
+        var discover = manager.Execute(
+            Request(
+                IllustratorPluginDebugManager.DiagnosticsOperation,
+                """
+                {
+                  "plugin":"AIPDebug",
+                  "action":"discover",
+                  "transport":"com"
+                }
+                """),
+            new object());
+        Assert.True(discover.Ok, discover.Error?.Message);
+
+        var error = Assert.Throws<HostAdapterException>(
+            () => manager.Execute(
+                Request(
+                    IllustratorPluginDebugManager.DiagnosticsOperation,
+                    """
+                    {
+                      "plugin":"AIPDebug",
+                      "action":"stats",
+                      "transport":"ipc"
+                    }
+                    """),
+                new object()));
+
+        Assert.Equal("plugin_debug_ipc_unavailable", error.Kind);
+        Assert.Equal(ExecutionState.NotStarted, error.Execution);
+        Assert.Equal(1, comCalls);
+    }
+
+    [Fact]
     public void EffectfulControlTreatsPostLaunchHelperFailureAsAmbiguous()
     {
         var identity = Identity();

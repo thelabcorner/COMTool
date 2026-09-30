@@ -28,6 +28,9 @@ $RuntimeIdentifierPattern = '^[A-Za-z0-9][A-Za-z0-9.-]*$'
 $root = Split-Path -Parent $PSScriptRoot
 $dotnet = Join-Path $PSScriptRoot "dotnet.ps1"
 $nugetConfig = Join-Path $root "NuGet.Config"
+$aipDebugCtlExplicit =
+    $PSBoundParameters.ContainsKey("AipDebugCtlPath") -and
+    -not [string]::IsNullOrWhiteSpace($AipDebugCtlPath)
 $defaultAipDebugCtlPath = [IO.Path]::GetFullPath(
     (Join-Path $root "..\aip-debug\build\Release\aipdebugctl.exe")
 )
@@ -704,20 +707,23 @@ try {
         }
     }
 
-    if (-not (Test-Path -LiteralPath $AipDebugCtlPath -PathType Leaf)) {
+    $aipDebugCtlDestination = $null
+    $aipDebugCtlPackaged = $false
+    if (Test-Path -LiteralPath $AipDebugCtlPath -PathType Leaf) {
+        if ([IO.Path]::GetExtension($AipDebugCtlPath) -ne ".exe") {
+            throw "The AIPDebug helper must be a Windows .exe: '$AipDebugCtlPath'."
+        }
+        $aipDebugCtlDestination = Join-Path $packageRoot "aipdebugctl.exe"
+        Copy-Item -LiteralPath $AipDebugCtlPath -Destination $aipDebugCtlDestination
+        Invoke-NativeHelperUsageSmoke -Path $aipDebugCtlDestination
+        $aipDebugCtlPackaged = $true
+    }
+    elseif ($aipDebugCtlExplicit) {
         throw (
-            "The native AIPDebug VectorIPC helper was not found at " +
-            "'$AipDebugCtlPath'. Build /scripts/aip-debug first or pass " +
-            "-AipDebugCtlPath explicitly."
+            "The explicitly requested native AIPDebug VectorIPC helper was not found at " +
+            "'$AipDebugCtlPath'."
         )
     }
-    if ([IO.Path]::GetExtension($AipDebugCtlPath) -ne ".exe") {
-        throw "The AIPDebug helper must be a Windows .exe: '$AipDebugCtlPath'."
-    }
-    $aipDebugCtlDestination = Join-Path $packageRoot "aipdebugctl.exe"
-    Copy-Item -LiteralPath $AipDebugCtlPath -Destination $aipDebugCtlDestination
-
-    Invoke-NativeHelperUsageSmoke -Path $aipDebugCtlDestination
 
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-user.ps1") -Destination $packageRoot
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "uninstall-user.ps1") -Destination $packageRoot
@@ -815,7 +821,11 @@ try {
 
     # Signing mutates PE bytes, so native-helper provenance must be captured
     # after the optional signing pass rather than from the pre-sign image.
-    $aipDebugCtlSha256 = Get-Sha256 $aipDebugCtlDestination
+    $aipDebugCtlSha256 = if ($aipDebugCtlPackaged) {
+        Get-Sha256 $aipDebugCtlDestination
+    } else {
+        $null
+    }
 
     $fileEntries = @(
         Get-StablePackageFileEntries -PackageRoot $packageRoot
@@ -869,7 +879,8 @@ try {
                 path = "aipdebugctl.exe"
                 sha256 = $aipDebugCtlSha256
                 transport = "vectoripc"
-                required = $true
+                required = $false
+                available = $aipDebugCtlPackaged
             }
         }
         entrypoints = $entrypoints

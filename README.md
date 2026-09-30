@@ -398,7 +398,14 @@ Document close requires an explicit policy: `save`, `discard`, or `reject_if_uns
 - `plugin.debug.diagnostics` — fixed AIPDebug discovery/info/log/snapshot/statistics surface.
 - `plugin.debug.control` — bounded AIPDebug control actions.
 
-The packaged native diagnostic helper is hash-checked against `release-manifest.json` before use. Direct VectorIPC diagnostics are allowed only after endpoint provenance is established through the exact Illustrator generation; the native peer then verifies the expected PID and process-start generation again.
+When the optional native diagnostic helper is packaged, it is hash-checked
+against `release-manifest.json` before use. Read-only
+`transport: "auto"` diagnostics fall back to the host-thread COM path when
+that helper is unavailable; explicit `transport: "ipc"` fails closed and
+effectful control never silently changes transport. Direct VectorIPC
+diagnostics are allowed only after endpoint provenance is established through
+the exact Illustrator generation; the native peer then verifies the expected
+PID and process-start generation again.
 
 ### ExtendScript debugger
 

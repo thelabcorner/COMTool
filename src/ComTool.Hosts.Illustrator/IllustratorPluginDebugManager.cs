@@ -243,6 +243,31 @@ internal sealed class IllustratorPluginDebugManager
 
         switch (outcome.Completion)
         {
+            case AipDebugCtlCompletion.Unavailable:
+                InvalidateProvenance(parsed.Plugin);
+                if (!IsControlOperation(request.Operation) &&
+                    parsed.Transport == TransportAuto)
+                {
+                    return ExecuteCom(
+                        request,
+                        appObject,
+                        parsed,
+                        selector,
+                        input,
+                        TransportCom,
+                        outcome.StandardError.Length == 0
+                            ? "The optional AIPDebug VectorIPC helper is unavailable."
+                            : outcome.StandardError);
+                }
+
+                throw new HostAdapterException(
+                    "plugin_debug_ipc_unavailable",
+                    outcome.StandardError.Length == 0
+                        ? "The optional AIPDebug vector-IPC client is unavailable."
+                        : outcome.StandardError,
+                    retryable: false,
+                    ExecutionState.NotStarted);
+
             case AipDebugCtlCompletion.Cancelled:
                 throw new HostAdapterException(
                     "plugin_debug_ipc_cancelled",

@@ -24,6 +24,7 @@ internal sealed record AipDebugCtlInvocation(
 internal enum AipDebugCtlCompletion
 {
     Completed,
+    Unavailable,
     TimedOut,
     Cancelled,
     OutputLimitExceeded,
@@ -124,7 +125,7 @@ internal sealed class AipDebugCtlClient : IAipDebugCtlInvoker
                 string.Empty,
                 $"{ExecutableName} was not found. Build/install AIPDebug or set " +
                 $"{ExecutableOverrideVariable} to an absolute executable path.",
-                AipDebugCtlCompletion.LaunchFailed);
+                AipDebugCtlCompletion.Unavailable);
         }
 
         var startInfo = new ProcessStartInfo
@@ -340,14 +341,27 @@ internal sealed class AipDebugCtlClient : IAipDebugCtlInvoker
         // installation accepted to the helper that the worker will execute.
         if (File.Exists(manifest))
         {
+            var descriptor = ReadPackagedDescriptor(manifest);
+            if (!descriptor.Available)
+            {
+                if (File.Exists(sibling))
+                {
+                    throw new AipDebugCtlTrustException(
+                        "The release manifest declares aipdebugctl.exe unavailable, " +
+                        "but an unmanifested sibling is present.");
+                }
+
+                return null;
+            }
+
             if (!File.Exists(sibling))
             {
                 throw new AipDebugCtlTrustException(
-                    "The release manifest requires aipdebugctl.exe, but the " +
-                    "packaged sibling is missing.");
+                    "The release manifest declares aipdebugctl.exe available, but " +
+                    "the packaged sibling is missing.");
             }
 
-            VerifyPackagedSibling(manifest, sibling);
+            VerifyPackagedSibling(sibling, descriptor);
             return sibling;
         }
 
@@ -374,9 +388,8 @@ internal sealed class AipDebugCtlClient : IAipDebugCtlInvoker
         return null;
     }
 
-    private static void VerifyPackagedSibling(
-        string manifestPath,
-        string executablePath)
+    private static PackagedHelperDescriptor ReadPackagedDescriptor(
+        string manifestPath)
     {
         try
         {
@@ -390,34 +403,72 @@ internal sealed class AipDebugCtlClient : IAipDebugCtlInvoker
                 helper.GetProperty("transport").GetString();
             var required =
                 helper.GetProperty("required").GetBoolean();
+            var available =
+                helper.TryGetProperty("available", out var availableElement)
+                    ? availableElement.GetBoolean()
+                    : true;
             var expectedSha256 =
-                helper.GetProperty("sha256").GetString();
+                helper.TryGetProperty("sha256", out var shaElement) &&
+                shaElement.ValueKind != JsonValueKind.Null
+                    ? shaElement.GetString()
+                    : null;
+            var shaValid =
+                !string.IsNullOrWhiteSpace(expectedSha256) &&
+                expectedSha256.Length == 64 &&
+                expectedSha256.All(
+                    character => Uri.IsHexDigit(character));
 
             if (!string.Equals(
                     path,
                     ExecutableName,
                     StringComparison.OrdinalIgnoreCase) ||
-                !required ||
                 !string.Equals(
                     transport,
                     "vectoripc",
                     StringComparison.Ordinal) ||
-                string.IsNullOrWhiteSpace(expectedSha256) ||
-                expectedSha256.Length != 64 ||
-                expectedSha256.Any(
-                    character => !Uri.IsHexDigit(character)))
+                (required && !available) ||
+                (available && !shaValid) ||
+                (!available && expectedSha256 is not null))
             {
                 throw new AipDebugCtlTrustException(
                     "release-manifest.json contains invalid aipdebugctl provenance.");
             }
 
+            return new PackagedHelperDescriptor(
+                required,
+                available,
+                expectedSha256);
+        }
+        catch (AipDebugCtlTrustException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (
+            ex is IOException or
+            UnauthorizedAccessException or
+            JsonException or
+            InvalidOperationException or
+            KeyNotFoundException)
+        {
+            throw new AipDebugCtlTrustException(
+                "Packaged aipdebugctl provenance could not be verified.",
+                ex);
+        }
+    }
+
+    private static void VerifyPackagedSibling(
+        string executablePath,
+        PackagedHelperDescriptor descriptor)
+    {
+        try
+        {
             using var executable = File.OpenRead(executablePath);
             var actualSha256 = Convert
                 .ToHexString(SHA256.HashData(executable))
                 .ToLowerInvariant();
             if (!string.Equals(
                     actualSha256,
-                    expectedSha256,
+                    descriptor.Sha256,
                     StringComparison.OrdinalIgnoreCase))
             {
                 throw new AipDebugCtlTrustException(
@@ -441,6 +492,11 @@ internal sealed class AipDebugCtlClient : IAipDebugCtlInvoker
                 ex);
         }
     }
+
+    private sealed record PackagedHelperDescriptor(
+        bool Required,
+        bool Available,
+        string? Sha256);
 
     private static void KillQuietly(Process process)
     {

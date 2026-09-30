@@ -190,20 +190,52 @@ $expectedRuntimeInformationalVersion =
     $ExpectedVersion + "+" + $sourceCommit.ToLowerInvariant()
 
 $nativeHelper = $manifest.nativeHelpers.aipdebugctl
+$nativeHelperRequiredProperty =
+    if ($null -ne $nativeHelper) {
+        $nativeHelper.PSObject.Properties["required"]
+    } else {
+        $null
+    }
+$nativeHelperAvailableProperty =
+    if ($null -ne $nativeHelper) {
+        $nativeHelper.PSObject.Properties["available"]
+    } else {
+        $null
+    }
 if ($null -eq $nativeHelper -or
     [string]$nativeHelper.path -ne "aipdebugctl.exe" -or
-    -not [bool]$nativeHelper.required -or
-    [string]$nativeHelper.transport -ne "vectoripc" -or
-    [string]$nativeHelper.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+    $null -eq $nativeHelperRequiredProperty -or
+    $nativeHelperRequiredProperty.Value -isnot [bool] -or
+    $null -eq $nativeHelperAvailableProperty -or
+    $nativeHelperAvailableProperty.Value -isnot [bool] -or
+    [string]$nativeHelper.transport -ne "vectoripc") {
     throw "Package manifest nativeHelpers.aipdebugctl is missing or invalid."
 }
-$packagedNativeHelper = Join-Path $sourceRoot ([string]$nativeHelper.path)
-if (-not (Test-Path -LiteralPath $packagedNativeHelper -PathType Leaf)) {
-    throw "Packaged native helper '$packagedNativeHelper' is missing."
+$nativeHelperRequired = [bool]$nativeHelperRequiredProperty.Value
+$nativeHelperAvailable = [bool]$nativeHelperAvailableProperty.Value
+if ($nativeHelperRequired -and -not $nativeHelperAvailable) {
+    throw "Package manifest cannot require an unavailable aipdebugctl helper."
 }
-if ((Get-Sha256 $packagedNativeHelper) -ne
-    ([string]$nativeHelper.sha256).ToLowerInvariant()) {
-    throw "Packaged aipdebugctl.exe hash does not match the release manifest."
+$packagedNativeHelper = Join-Path $sourceRoot ([string]$nativeHelper.path)
+if ($nativeHelperAvailable) {
+    if ([string]$nativeHelper.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "Available aipdebugctl helper is missing a valid SHA-256."
+    }
+    if (-not (Test-Path -LiteralPath $packagedNativeHelper -PathType Leaf)) {
+        throw "Packaged native helper '$packagedNativeHelper' is missing."
+    }
+    if ((Get-Sha256 $packagedNativeHelper) -ne
+        ([string]$nativeHelper.sha256).ToLowerInvariant()) {
+        throw "Packaged aipdebugctl.exe hash does not match the release manifest."
+    }
+}
+else {
+    if (-not [string]::IsNullOrWhiteSpace([string]$nativeHelper.sha256)) {
+        throw "Unavailable aipdebugctl helper must not declare a SHA-256."
+    }
+    if (Test-Path -LiteralPath $packagedNativeHelper) {
+        throw "Package contains unmanifested aipdebugctl.exe bytes."
+    }
 }
 
 $base = Join-Path ([IO.Path]::GetTempPath()) ("comtool v2 package verify " + [Guid]::NewGuid().ToString("N"))
@@ -291,15 +323,19 @@ try {
     }
 
     $installedNativeHelper = Join-Path $expectedCurrentRoot "aipdebugctl.exe"
-    if (-not (Test-Path -LiteralPath $installedNativeHelper -PathType Leaf)) {
-        throw "Installed VectorIPC helper is missing from the stable current path."
+    if ($nativeHelperAvailable) {
+        if (-not (Test-Path -LiteralPath $installedNativeHelper -PathType Leaf)) {
+            throw "Installed VectorIPC helper is missing from the stable current path."
+        }
+        if ((Get-Sha256 $installedNativeHelper) -ne
+            ([string]$nativeHelper.sha256).ToLowerInvariant()) {
+            throw "Installed aipdebugctl.exe does not match the release-manifest hash."
+        }
+        Invoke-NativeHelperUsageSmoke -Path $installedNativeHelper
     }
-    if ((Get-Sha256 $installedNativeHelper) -ne
-        ([string]$nativeHelper.sha256).ToLowerInvariant()) {
-        throw "Installed aipdebugctl.exe does not match the release-manifest hash."
+    elseif (Test-Path -LiteralPath $installedNativeHelper) {
+        throw "Installed package unexpectedly contains aipdebugctl.exe."
     }
-
-    Invoke-NativeHelperUsageSmoke -Path $installedNativeHelper
 
     $pipe = "comtool-v2-package-verify-" + [Guid]::NewGuid().ToString("N")
     $runtimeArgs =
@@ -543,6 +579,7 @@ try {
         stableNodeSdk = $true
         stableAgentBundle = $true
         stableNativeHelper = $true
+        nativeHelperPackaged = $nativeHelperAvailable
         liveRuntimeUninstallRefused = $true
         damagedInstallRepair = $true
         sourceInstallDisjointPreflight = $true
