@@ -56,8 +56,8 @@ if (-not (Test-Path -LiteralPath $nugetConfig -PathType Leaf)) {
 $releaseRoot = Join-Path $root ".artifacts\release"
 $artifactName = "$Version-$RuntimeIdentifier"
 $artifactRoot = Join-Path $releaseRoot $artifactName
-$stagingRoot = Join-Path $releaseRoot (
-    ".building-$artifactName-" + [Guid]::NewGuid().ToString("N")
+$stagingRoot = Join-Path ([IO.Path]::GetTempPath()) (
+    "ctv2-release-building-$artifactName-" + [Guid]::NewGuid().ToString("N")
 )
 $publishRoot = Join-Path $stagingRoot "publish"
 $packageRoot = Join-Path $stagingRoot "package"
@@ -143,6 +143,90 @@ function Invoke-PackageVerification {
 function Get-Sha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-StablePackageFileEntries {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageRoot,
+        [int]$Attempts = 6,
+        [int]$RetryDelayMs = 100
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $beforeFiles = @(
+            Get-ChildItem -LiteralPath $PackageRoot -File -Recurse |
+                Sort-Object FullName
+        )
+        $beforeState = @(
+            $beforeFiles | ForEach-Object {
+                [IO.Path]::GetRelativePath(
+                    $PackageRoot,
+                    $_.FullName
+                ).Replace("\", "/") +
+                "|" + $_.Length +
+                "|" + $_.LastWriteTimeUtc.Ticks
+            }
+        )
+
+        $entries = [System.Collections.Generic.List[object]]::new()
+        $unstable = $false
+        foreach ($file in $beforeFiles) {
+            if (-not (Test-Path -LiteralPath $file.FullName -PathType Leaf)) {
+                $unstable = $true
+                break
+            }
+
+            try {
+                $sha256 = Get-Sha256 $file.FullName
+            }
+            catch {
+                if (-not (Test-Path -LiteralPath $file.FullName -PathType Leaf)) {
+                    $unstable = $true
+                    break
+                }
+                throw
+            }
+
+            [void]$entries.Add([ordered]@{
+                path = [IO.Path]::GetRelativePath(
+                    $PackageRoot,
+                    $file.FullName
+                ).Replace("\", "/")
+                size = $file.Length
+                sha256 = $sha256
+            })
+        }
+
+        if (-not $unstable) {
+            $afterFiles = @(
+                Get-ChildItem -LiteralPath $PackageRoot -File -Recurse |
+                    Sort-Object FullName
+            )
+            $afterState = @(
+                $afterFiles | ForEach-Object {
+                    [IO.Path]::GetRelativePath(
+                        $PackageRoot,
+                        $_.FullName
+                    ).Replace("\", "/") +
+                    "|" + $_.Length +
+                    "|" + $_.LastWriteTimeUtc.Ticks
+                }
+            )
+
+            if (($beforeState -join "`n") -eq ($afterState -join "`n")) {
+                return @($entries)
+            }
+        }
+
+        if ($attempt -lt $Attempts) {
+            Start-Sleep -Milliseconds $RetryDelayMs
+        }
+    }
+
+    throw (
+        "Package tree '$PackageRoot' did not become quiescent after " +
+        "$Attempts inventory attempts."
+    )
 }
 
 function Invoke-NativeHelperUsageSmoke {
@@ -734,15 +818,7 @@ try {
     $aipDebugCtlSha256 = Get-Sha256 $aipDebugCtlDestination
 
     $fileEntries = @(
-        Get-ChildItem -LiteralPath $packageRoot -File -Recurse |
-            Sort-Object FullName |
-            ForEach-Object {
-                [ordered]@{
-                    path = [IO.Path]::GetRelativePath($packageRoot, $_.FullName).Replace("\", "/")
-                    size = $_.Length
-                    sha256 = Get-Sha256 $_.FullName
-                }
-            }
+        Get-StablePackageFileEntries -PackageRoot $packageRoot
     )
 
     $manifest = [ordered]@{
@@ -825,6 +901,13 @@ try {
 
     Assert-SourceStable -ExpectedCommit $sourceCommit -AllowDirtySource ([bool]$AllowDirty) -ExpectedTreeFingerprint $sourceTreeFingerprint -GitRoot $gitRoot.Trim()
 
+    # Mutable construction lives outside repo-local .artifacts so unrelated
+    # development cleanup cannot invalidate an in-flight release. Only a fully
+    # verified artifact is promoted into the immutable release namespace.
+    New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
+    if (Test-Path -LiteralPath $artifactRoot) {
+        throw "Release artifact '$artifactName' appeared while the release was building. Release versions are immutable; choose a new version."
+    }
     Move-Item -LiteralPath $stagingRoot -Destination $artifactRoot
 
     $finalPackageRoot = Join-Path $artifactRoot "package"

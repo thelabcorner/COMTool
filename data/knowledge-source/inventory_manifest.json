@@ -1,0 +1,19 @@
+{
+  "source_file": "illustrator_com_commands.json",
+  "source_sha256": "fa8baefb8899eb60500789512c0a0eb07999e137326404f9399956c292dc6db7",
+  "generated_at_utc": "2026-09-27T23:22:13.246304+00:00",
+  "interfaces": 224,
+  "interface_kinds": {
+    "DISPATCH": 160,
+    "COCLASS": 64
+  },
+  "methods": 670,
+  "properties": 2100,
+  "property_accessors": 3325,
+  "parameters": 2402,
+  "coclass_implemented_interfaces": 224,
+  "source_outgoing_interfaces_flagged": 0,
+  "enums": 138,
+  "enum_values": 678,
+  "sqlite_file": "illustrator_com.sqlite"
+}

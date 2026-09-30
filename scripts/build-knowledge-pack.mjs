@@ -5,8 +5,9 @@
 // runtime reads only the generated pack text through ComTool.Knowledge, which
 // has no SQLite dependency and never loads the multi-megabyte source JSON.
 //
-// Authoritative source for this lane is the clean, tracked
-// data/illustrator_com.sqlite index plus data/inventory_manifest.json. The
+// Authoritative source for this lane is the clean, tracked repo-owned
+// data/knowledge-source/illustrator_com.sqlite index plus
+// data/knowledge-source/inventory_manifest.json. The
 // generator:
 //
 //   1. hashes the SQLite database before and after the read and fails if the
@@ -35,11 +36,10 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const V2_ROOT = path.resolve(HERE, '..');
-const SCRIPTS_ROOT = path.resolve(V2_ROOT, '..');
-const SKILL_ROOT = path.join(
-  SCRIPTS_ROOT,
-  'agent-skills',
-  'illustrator-com-automation-skill');
+const KNOWLEDGE_SOURCE_ROOT = path.join(
+  V2_ROOT,
+  'data',
+  'knowledge-source');
 
 export const PACK_FORMAT = 'comtool.knowledge.pack/v1';
 export const PACK_VERSION = 1;
@@ -95,9 +95,9 @@ function parseArgs(argv) {
   const options = {
     check: false,
     out: DEFAULT_OUT,
-    db: path.join(SKILL_ROOT, 'data', 'illustrator_com.sqlite'),
-    manifest: path.join(SKILL_ROOT, 'data', 'inventory_manifest.json'),
-    json: path.join(SKILL_ROOT, 'data', 'illustrator_com_commands.json'),
+    db: path.join(KNOWLEDGE_SOURCE_ROOT, 'illustrator_com.sqlite'),
+    manifest: path.join(KNOWLEDGE_SOURCE_ROOT, 'inventory_manifest.json'),
+    json: path.join(KNOWLEDGE_SOURCE_ROOT, 'illustrator_com_commands.json'),
     sqlite: undefined,
     observedHostVersion: undefined,
     observedHostProduct: undefined,
